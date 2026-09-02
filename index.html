@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14171A">
+<title>Wrap Throughput Timer</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{
+    --bg:#14171A; --surface:#1E2226; --surface-2:#262B30; --surface-3:#2F353B;
+    --text:#ECEDEE; --text-dim:#9BA3AB; --text-faint:#6B7278;
+    --accent:#E8A33D; --accent-strong:#F2B347;
+    --danger:#D9534F; --machine:#5B8DB8; --success:#4CA771;
+    --border:#33393F; --radius:6px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding-bottom:72px;
+  }
+  .nums{font-variant-numeric:tabular-nums;font-feature-settings:"tnum";}
+  header.app{
+    position:sticky; top:0; z-index:20;
+    background:var(--bg); border-bottom:1px solid var(--border);
+    padding:14px 16px 10px;
+  }
+  header.app h1{font-size:17px; margin:0 0 2px; font-weight:700; letter-spacing:-0.01em;}
+  header.app p{margin:0; font-size:12.5px; color:var(--text-dim);}
+  nav.tabs{
+    position:fixed; bottom:0; left:0; right:0; z-index:30;
+    display:flex; background:var(--surface); border-top:1px solid var(--border);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  nav.tabs button{
+    flex:1; background:none; border:none; color:var(--text-faint);
+    font-size:11.5px; padding:10px 4px 8px; display:flex; flex-direction:column;
+    align-items:center; gap:3px; font-family:inherit;
+  }
+  nav.tabs button .dot{width:6px;height:6px;border-radius:50%;background:transparent;}
+  nav.tabs button.active{color:var(--accent);}
+  nav.tabs button.active .dot{background:var(--accent);}
+  main{padding:14px 14px 12px; max-width:640px; margin:0 auto;}
+  .view{display:none;}
+  .view.active{display:block;}
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:14px; margin-bottom:12px;
+  }
+  .card h2{font-size:13.5px; margin:0 0 10px; color:var(--text-dim); font-weight:600;}
+  .card h3{font-size:14px; margin:0 0 8px; font-weight:600;}
+  .row{display:flex; gap:8px; align-items:center;}
+  .row.wrap{flex-wrap:wrap;}
+  .row.between{justify-content:space-between;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  label{display:block; font-size:12px; color:var(--text-dim); margin-bottom:4px;}
+  input[type=text],input[type=number],select,textarea{
+    width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text);
+    padding:10px 10px; border-radius:4px; font-size:14.5px; font-family:inherit;
+  }
+  textarea{resize:vertical; min-height:60px;}
+  .field{margin-bottom:10px;}
+  button{cursor:pointer; font-family:inherit;}
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    background:var(--surface-3); color:var(--text); border:1px solid var(--border);
+    padding:11px 14px; border-radius:4px; font-size:14px; font-weight:600;
+  }
+  .btn:active{transform:scale(0.98);}
+  .btn.primary{background:var(--accent); color:#1A1300; border-color:var(--accent);}
+  .btn.danger{background:var(--danger); color:#fff; border-color:var(--danger);}
+  .btn.machine{background:var(--machine); color:#fff; border-color:var(--machine);}
+  .btn.success{background:var(--success); color:#0C1F14; border-color:var(--success);}
+  .btn.ghost{background:transparent;}
+  .btn.block{width:100%;}
+  .btn.small{padding:7px 10px; font-size:12.5px;}
+  .btn:disabled{opacity:0.4;}
+  .pillrow{display:flex; gap:8px;}
+  .pillrow .btn{flex:1;}
+  .badge{
+    display:inline-block; font-size:11px; padding:2px 7px; border-radius:20px;
+    background:var(--surface-2); color:var(--text-dim); border:1px solid var(--border);
+  }
+  .badge.running{background:rgba(232,163,61,.15); color:var(--accent); border-color:var(--accent);}
+  .badge.fault{background:rgba(217,83,79,.15); color:var(--danger); border-color:var(--danger);}
+  .panel{
+    border-left:3px solid var(--border); background:var(--surface); border-radius:var(--radius);
+    border-top:1px solid var(--border); border-right:1px solid var(--border); border-bottom:1px solid var(--border);
+    padding:14px; margin-bottom:14px;
+  }
+  .panel.state-idle{border-left-color:var(--border);}
+  .panel.state-cycle{border-left-color:var(--accent);}
+  .panel.state-fault{border-left-color:var(--danger);}
+  .panel-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;}
+  .panel-head .label{font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-faint); font-weight:700;}
+  .timer-big{font-size:38px; font-weight:700; line-height:1; margin:6px 0;}
+  .timer-sub{font-size:12.5px; color:var(--text-dim); margin-bottom:2px;}
+  .stack{display:flex; flex-direction:column; gap:8px; margin-top:12px;}
+  .fault-item{
+    display:flex; justify-content:space-between; align-items:center;
+    background:rgba(217,83,79,.1); border:1px solid var(--danger); border-radius:4px;
+    padding:8px 10px; margin-top:6px; font-size:13px;
+  }
+  .fault-item .fdur{font-weight:700;}
+  .list-item{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:9px 4px; border-bottom:1px solid var(--border); font-size:14px;
+  }
+  .list-item:last-child{border-bottom:none;}
+  .list-item small{display:block; color:var(--text-dim); font-size:11.5px; margin-top:2px;}
+  .empty{color:var(--text-faint); font-size:13px; padding:10px 2px;}
+  .overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:100;
+    display:flex; align-items:flex-end; justify-content:center;
+  }
+  .sheet{
+    background:var(--surface); border-radius:14px 14px 0 0; width:100%; max-width:640px;
+    padding:16px 16px calc(16px + env(safe-area-inset-bottom)); max-height:88vh; overflow-y:auto;
+  }
+  .sheet h3{margin:0 0 12px;}
+  .close-x{background:none;border:none;color:var(--text-dim);font-size:20px;line-height:1;padding:4px 8px;}
+  .modal-actions{display:flex; gap:8px; margin-top:14px;}
+  .modal-actions .btn{flex:1;}
+  select[multiple]{min-height:80px;}
+  .chip-select{display:flex; gap:6px; flex-wrap:wrap;}
+  .chip{
+    padding:8px 12px; border-radius:20px; border:1px solid var(--border); background:var(--surface-2);
+    font-size:13px; color:var(--text-dim);
+  }
+  .chip.selected{background:var(--accent); color:#1A1300; border-color:var(--accent); font-weight:600;}
+  .settings-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .hint{font-size:11.5px; color:var(--text-faint); margin-top:3px;}
+  hr.sep{border:none; border-top:1px solid var(--border); margin:12px 0;}
+  .toast{
+    position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+    background:var(--surface-3); color:var(--text); padding:10px 16px; border-radius:20px;
+    font-size:13px; z-index:200; border:1px solid var(--border); opacity:0; transition:opacity .2s;
+    pointer-events:none;
+  }
+  .toast.show{opacity:1;}
+  .mic-btn{
+    width:44px; height:44px; border-radius:50%; border:1px solid var(--border);
+    background:var(--surface-2); color:var(--text-dim); display:flex; align-items:center; justify-content:center;
+    font-size:18px; flex-shrink:0;
+  }
+  .mic-btn.recording{background:var(--danger); color:#fff; border-color:var(--danger);}
+</style>
+</head>
+<body>
+
+<header class="app">
+  <h1>Wrap Throughput Timer</h1>
+  <p id="headerSub">Cycle · wrap · fault tracking for pallet wrappers</p>
+</header>
+
+<main>
+  <!-- TIMER VIEW -->
+  <div class="view active" id="view-timer">
+    <div class="row between" style="margin-bottom:10px;">
+      <div class="row" style="gap:6px;">
+        <button class="btn small" id="splitToggleBtn">Split: Off</button>
+      </div>
+      <div class="badge" id="dateBadge"></div>
+    </div>
+    <div id="panelsContainer"></div>
+  </div>
+
+  <!-- SETUP VIEW -->
+  <div class="view" id="view-setup">
+    <div class="card">
+      <h2>Locations</h2>
+      <div id="locationsList" class="stack"></div>
+      <div class="row" style="margin-top:10px; gap:8px;">
+        <input type="text" id="newLocationName" placeholder="New location name">
+        <button class="btn" id="addLocationBtn">Add</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Systems</h2>
+      <div id="systemsList" class="stack"></div>
+      <button class="btn block" id="addSystemBtn" style="margin-top:8px;">+ Add system</button>
+    </div>
+
+    <div class="card">
+      <h2>Pairs</h2>
+      <div id="pairsList" class="stack"></div>
+      <button class="btn block" id="addPairBtn" style="margin-top:8px;">+ Add pair</button>
+    </div>
+
+    <div class="card">
+      <h2>Wrappers</h2>
+      <div id="wrappersList" class="stack"></div>
+      <button class="btn block" id="addWrapperBtn" style="margin-top:8px;">+ Add wrapper</button>
+    </div>
+
+    <div class="card">
+      <h2>Reset</h2>
+      <button class="btn danger block" id="loadDefaultsBtn">Load starter defaults (SW0037/38, example low-speed pairs)</button>
+      <button class="btn ghost block" id="wipeBtn" style="margin-top:8px;">Erase all data</button>
+    </div>
+  </div>
+
+  <!-- HISTORY / EXPORT VIEW -->
+  <div class="view" id="view-history">
+    <div class="card">
+      <h2>Sessions logged</h2>
+      <div id="sessionsList" class="stack"></div>
+      <p class="empty" id="sessionsEmpty" style="display:none;">No completed sessions yet.</p>
+    </div>
+    <div class="card">
+      <h2>Export</h2>
+      <p class="hint" style="margin-bottom:10px;">One row per fault (or one row per cycle if no faults). Includes session, wrapper/pair/system, timestamps, durations, and not-wrapped reasons — ready for a dashboard to ingest.</p>
+      <button class="btn primary block" id="exportCsvBtn">Export CSV</button>
+      <button class="btn block" id="shareCsvBtn" style="margin-top:8px; display:none;">Share / Email CSV</button>
+    </div>
+  </div>
+</main>
+
+<nav class="tabs">
+  <button data-view="timer" class="active"><span class="dot"></span>Timer</button>
+  <button data-view="setup"><span class="dot"></span>Setup</button>
+  <button data-view="history"><span class="dot"></span>History / Export</button>
+</nav>
+
+<div id="modalRoot"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------------------------------------------------------------
+   STATE
+--------------------------------------------------------------- */
+const STORE_KEY = 'wrapTimerState_v1';
+const PRESET_REASONS = ['Jam','Fault','Wrong size','Other'];
+
+function uid(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
+
+function defaultState(){
+  return {
+    locations: [
+      {id:uid('loc'), name:'High Side Dry'},
+      {id:uid('loc'), name:'Low Side Dry'},
+      {id:uid('loc'), name:'FDD Receiving'},
+      {id:uid('loc'), name:'FDD Eggs'},
+      {id:uid('loc'), name:'FDD High Speeds'},
+      {id:uid('loc'), name:'FDD Elevators'},
+    ],
+    systems: [],
+    pairs: [],
+    wrappers: [],
+    sessions: [],
+    panels: { A: null, B: null }, // in-progress session+cycle runtime state
+    splitMode: false,
+  };
+}
+
+let state = load();
+
+function load(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){ console.error('load failed', e); }
+  return defaultState();
+}
+function save(){
+  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+}
+function loadStarterDefaults(){
+  const highLoc = state.locations.find(l=>l.name==='FDD High Speeds') || state.locations[0];
+  const lowLoc = state.locations.find(l=>l.name==='Low Side Dry') || state.locations[0];
+
+  const sys1 = {id:uid('sys'), name:'High Speed System 38/39', locationId:highLoc.id, pairIds:[]};
+  const pair1 = {id:uid('pair'), name:'SW0038/0039', systemId:sys1.id, wrapperIds:[]};
+  const w38 = mkWrapper('SW0038','high',pair1.id);
+  const w39 = mkWrapper('SW0039','high',pair1.id);
+  pair1.wrapperIds = [w38.id, w39.id];
+  sys1.pairIds = [pair1.id];
+
+  const sys2 = {id:uid('sys'), name:'Low Speed System 19-23', locationId:lowLoc.id, pairIds:[]};
+  const pairA = {id:uid('pair'), name:'SW0019/0020', systemId:sys2.id, wrapperIds:[]};
+  const w19 = mkWrapper('SW0019','low',pairA.id);
+  const w20 = mkWrapper('SW0020','low',pairA.id);
+  pairA.wrapperIds=[w19.id,w20.id];
+  const pairB = {id:uid('pair'), name:'SW0022/0023', systemId:sys2.id, wrapperIds:[]};
+  const w22 = mkWrapper('SW0022','low',pairB.id);
+  const w23 = mkWrapper('SW0023','low',pairB.id);
+  pairB.wrapperIds=[w22.id,w23.id];
+  sys2.pairIds=[pairA.id, pairB.id];
+
+  state.systems.push(sys1, sys2);
+  state.pairs.push(pair1, pairA, pairB);
+  state.wrappers.push(w38,w39,w19,w20,w22,w23);
+  save();
+  renderAll();
+  showToast('Starter defaults loaded');
+}
+function mkWrapper(number, speedClass, pairId){
+  return {
+    id:uid('wr'), number, speedClass, pairId,
+    settings:{ carriageUp:'', carriageDown:'', rotation:'', filmTension:'', topWraps:'', bottomWraps:'', autoHeight:'' }
+  };
+}
+
+/* ---------------------------------------------------------------
+   HELPERS
+--------------------------------------------------------------- */
+function fmtDur(ms){
+  if(ms==null || ms<0) ms=0;
+  const s = Math.floor(ms/1000);
+  const h = Math.floor(s/3600);
+  const m = Math.floor((s%3600)/60);
+  const sec = s%60;
+  if(h>0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  return `${m}:${String(sec).padStart(2,'0')}`;
+}
+function nowIso(){ return new Date().toISOString(); }
+function fmtDateTime(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(()=>t.classList.remove('show'), 1800);
+}
+function getPair(id){ return state.pairs.find(p=>p.id===id); }
+function getSystem(id){ return state.systems.find(s=>s.id===id); }
+function getWrapper(id){ return state.wrappers.find(w=>w.id===id); }
+function getLocation(id){ return state.locations.find(l=>l.id===id); }
+function pairWrappers(pair){ return pair.wrapperIds.map(getWrapper).filter(Boolean); }
+function pairLabel(pair){
+  const sys = getSystem(pair.systemId);
+  return pair.name + (sys? ' · '+sys.name : '');
+}
+
+/* ---------------------------------------------------------------
+   TAB NAV
+--------------------------------------------------------------- */
+document.querySelectorAll('nav.tabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+    if(btn.dataset.view==='history') renderHistory();
+    if(btn.dataset.view==='setup') renderSetup();
+  });
+});
+
+/* ---------------------------------------------------------------
+   SETUP VIEW RENDERING
+--------------------------------------------------------------- */
+function renderSetup(){
+  // Locations
+  const locList = document.getElementById('locationsList');
+  locList.innerHTML = '';
+  if(state.locations.length===0) locList.innerHTML = '<p class="empty">No locations yet.</p>';
+  state.locations.forEach(loc=>{
+    const div = document.createElement('div');
+    div.className = 'list-item';
+    div.innerHTML = `<span>${loc.name}</span>`;
+    const del = document.createElement('button');
+    del.className='btn small ghost'; del.textContent='Remove';
+    del.onclick=()=>{ state.locations = state.locations.filter(l=>l.id!==loc.id); save(); renderSetup(); };
+    div.appendChild(del);
+    locList.appendChild(div);
+  });
+
+  // Systems
+  const sysList = document.getElementById('systemsList');
+  sysList.innerHTML = '';
+  if(state.systems.length===0) sysList.innerHTML = '<p class="empty">No systems yet.</p>';
+  state.systems.forEach(sys=>{
+    const loc = getLocation(sys.locationId);
+    const div = document.createElement('div');
+    div.className = 'list-item';
+    div.innerHTML = `<span>${sys.name}<small>${loc? loc.name:'No location'} · ${sys.pairIds.length} pair(s)</small></span>`;
+    const del = document.createElement('button');
+    del.className='btn small ghost'; del.textContent='Remove';
+    del.onclick=()=>{
+      state.systems = state.systems.filter(s=>s.id!==sys.id);
+      save(); renderSetup();
+    };
+    div.appendChild(del);
+    sysList.appendChild(div);
+  });
+
+  // Pairs
+  const pairList = document.getElementById('pairsList');
+  pairList.innerHTML = '';
+  if(state.pairs.length===0) pairList.innerHTML = '<p class="empty">No pairs yet.</p>';
+  state.pairs.forEach(pair=>{
+    const sys = getSystem(pair.systemId);
+    const wrs = pairWrappers(pair);
+    const div = document.createElement('div');
+    div.className = 'list-item';
+    div.innerHTML = `<span>${pair.name}<small>${sys?sys.name:'No system'} · ${wrs.map(w=>w.number).join(', ')||'no wrappers'}</small></span>`;
+    const del = document.createElement('button');
+    del.className='btn small ghost'; del.textContent='Remove';
+    del.onclick=()=>{
+      state.pairs = state.pairs.filter(p=>p.id!==pair.id);
+      state.systems.forEach(s=> s.pairIds = s.pairIds.filter(id=>id!==pair.id));
+      save(); renderSetup();
+    };
+    div.appendChild(del);
+    pairList.appendChild(div);
+  });
+
+  // Wrappers
+  const wrList = document.getElementById('wrappersList');
+  wrList.innerHTML = '';
+  if(state.wrappers.length===0) wrList.innerHTML = '<p class="empty">No wrappers yet.</p>';
+  state.wrappers.forEach(w=>{
+    const pair = getPair(w.pairId);
+    const div = document.createElement('div');
+    div.className = 'list-item';
+    div.innerHTML = `<span>${w.number} <span class="badge">${w.speedClass}</span><small>${pair?pair.name:'unassigned pair'}</small></span>`;
+    const del = document.createElement('button');
+    del.className='btn small ghost'; del.textContent='Remove';
+    del.onclick=()=>{
+      state.wrappers = state.wrappers.filter(x=>x.id!==w.id);
+      state.pairs.forEach(p=> p.wrapperIds = p.wrapperIds.filter(id=>id!==w.id));
+      save(); renderSetup();
+    };
+    div.appendChild(del);
+    wrList.appendChild(div);
+  });
+}
+
+document.getElementById('addLocationBtn').onclick = ()=>{
+  const input = document.getElementById('newLocationName');
+  const name = input.value.trim();
+  if(!name) return;
+  state.locations.push({id:uid('loc'), name});
+  input.value='';
+  save(); renderSetup();
+};
+document.getElementById('loadDefaultsBtn').onclick = loadStarterDefaults;
+document.getElementById('wipeBtn').onclick = ()=>{
+  openConfirm('Erase all data?','This clears every wrapper, pair, session, and log. This cannot be undone.', ()=>{
+    state = defaultState(); save(); renderAll();
+  });
+};
+
+document.getElementById('addSystemBtn').onclick = ()=> openSystemModal();
+document.getElementById('addPairBtn').onclick = ()=> openPairModal();
+document.getElementById('addWrapperBtn').onclick = ()=> openWrapperModal();
+
+function openSystemModal(){
+  const locOptions = state.locations.map(l=>`<option value="${l.id}">${l.name}</option>`).join('');
+  openSheet('New system', `
+    <div class="field"><label>System name</label><input type="text" id="m_sysName" placeholder="e.g. High Speed System 38/39"></div>
+    <div class="field"><label>Location</label><select id="m_sysLoc">${locOptions}</select></div>
+  `, ()=>{
+    const name = document.getElementById('m_sysName').value.trim();
+    if(!name) return showToast('Enter a system name');
+    const locationId = document.getElementById('m_sysLoc').value;
+    state.systems.push({id:uid('sys'), name, locationId, pairIds:[]});
+    save(); renderSetup(); closeSheet();
+  });
+}
+function openPairModal(){
+  const sysOptions = state.systems.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  if(state.systems.length===0) return showToast('Add a system first');
+  openSheet('New pair', `
+    <div class="field"><label>Pair name</label><input type="text" id="m_pairName" placeholder="e.g. SW0020/0021"></div>
+    <div class="field"><label>System</label><select id="m_pairSys">${sysOptions}</select></div>
+  `, ()=>{
+    const name = document.getElementById('m_pairName').value.trim();
+    if(!name) return showToast('Enter a pair name');
+    const systemId = document.getElementById('m_pairSys').value;
+    const pair = {id:uid('pair'), name, systemId, wrapperIds:[]};
+    state.pairs.push(pair);
+    getSystem(systemId).pairIds.push(pair.id);
+    save(); renderSetup(); closeSheet();
+  });
+}
+function openWrapperModal(){
+  const pairOptions = state.pairs.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  if(state.pairs.length===0) return showToast('Add a pair first');
+  openSheet('New wrapper', `
+    <div class="field"><label>Wrapper number</label><input type="text" id="m_wrNum" placeholder="e.g. SW0021"></div>
+    <div class="field"><label>Speed class</label>
+      <div class="chip-select" id="m_wrSpeed">
+        <div class="chip selected" data-val="high">High speed</div>
+        <div class="chip" data-val="low">Low speed</div>
+      </div>
+    </div>
+    <div class="field"><label>Pair</label><select id="m_wrPair">${pairOptions}</select></div>
+  `, ()=>{
+    const number = document.getElementById('m_wrNum').value.trim();
+    if(!number) return showToast('Enter a wrapper number');
+    const speedClass = document.querySelector('#m_wrSpeed .chip.selected').dataset.val;
+    const pairId = document.getElementById('m_wrPair').value;
+    const w = mkWrapper(number, speedClass, pairId);
+    state.wrappers.push(w);
+    getPair(pairId).wrapperIds.push(w.id);
+    save(); renderSetup(); closeSheet();
+  });
+  document.querySelectorAll('#m_wrSpeed .chip').forEach(c=>{
+    c.onclick = ()=>{
+      document.querySelectorAll('#m_wrSpeed .chip').forEach(x=>x.classList.remove('selected'));
+      c.classList.add('selected');
+    };
+  });
+}
+
+/* ---------------------------------------------------------------
+   MODAL / SHEET UTILITIES
+--------------------------------------------------------------- */
+function openSheet(title, bodyHtml, onSave, saveLabel){
+  const root = document.getElementById('modalRoot');
+  root.innerHTML = `
+    <div class="overlay" id="ov">
+      <div class="sheet">
+        <div class="row between"><h3>${title}</h3><button class="close-x" id="ovClose">&times;</button></div>
+        <div id="ovBody">${bodyHtml}</div>
+        <div class="modal-actions">
+          <button class="btn ghost" id="ovCancel">Cancel</button>
+          <button class="btn primary" id="ovSave">${saveLabel||'Save'}</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('ovClose').onclick = closeSheet;
+  document.getElementById('ovCancel').onclick = closeSheet;
+  document.getElementById('ovSave').onclick = onSave;
+}
+function closeSheet(){ document.getElementById('modalRoot').innerHTML=''; }
+function openConfirm(title, msg, onConfirm){
+  openSheet(title, `<p style="color:var(--text-dim); font-size:14px;">${msg}</p>`, ()=>{ onConfirm(); closeSheet(); }, 'Confirm');
+}
+
+/* ---------------------------------------------------------------
+   TIMER VIEW — PANELS
+--------------------------------------------------------------- */
+document.getElementById('splitToggleBtn').onclick = ()=>{
+  state.splitMode = !state.splitMode;
+  save();
+  renderPanels();
+};
+document.getElementById('dateBadge').textContent = new Date().toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+
+let tickTimer = null;
+function startTicking(){
+  if(tickTimer) return;
+  tickTimer = setInterval(()=>{
+    document.querySelectorAll('[data-live]').forEach(el=>{
+      const start = Number(el.dataset.live);
+      const offset = Number(el.dataset.offset||0);
+      el.textContent = fmtDur(Date.now()-start-offset);
+    });
+  },500);
+}
+startTicking();
+
+function renderPanels(){
+  const container = document.getElementById('panelsContainer');
+  const btn = document.getElementById('splitToggleBtn');
+  btn.textContent = 'Split: ' + (state.splitMode ? 'On' : 'Off');
+  container.innerHTML = '';
+  const panelIds = state.splitMode ? ['A','B'] : ['A'];
+  panelIds.forEach(pid=> container.appendChild(renderPanel(pid)));
+}
+
+function renderPanel(panelId){
+  const wrap = document.createElement('div');
+  const runtime = state.panels[panelId];
+  let stateClass = 'state-idle';
+  if(runtime && runtime.activeCycle){
+    stateClass = (runtime.activeCycle.activeFaults && runtime.activeCycle.activeFaults.length>0) ? 'state-fault' : 'state-cycle';
+  }
+  wrap.className = 'panel ' + stateClass;
+  const label = state.splitMode ? `Panel ${panelId}` : 'Timer';
+
+  if(!runtime || !runtime.sessionId){
+    // No active session — show pair picker + start session
+    const pairOptions = state.pairs.map(p=>`<option value="${p.id}">${pairLabel(p)}</option>`).join('');
+    wrap.innerHTML = `
+      <div class="panel-head"><span class="label">${label}</span><span class="badge">Idle</span></div>
+      ${state.pairs.length===0 ? '<p class="empty">No pairs configured. Add one in Setup.</p>' : `
+      <div class="field"><label>Pair to observe</label><select id="pairSelect_${panelId}">${pairOptions}</select></div>
+      <button class="btn primary block" id="startSessionBtn_${panelId}">Start session</button>
+      `}
+    `;
+    if(state.pairs.length>0){
+      wrap.querySelector('#startSessionBtn_'+panelId).onclick = ()=> openStartSessionModal(panelId, wrap.querySelector('#pairSelect_'+panelId).value);
+    }
+    return wrap;
+  }
+
+  const pair = getPair(runtime.pairId);
+  const wrs = pairWrappers(pair);
+  const cycle = runtime.activeCycle;
+
+  let body = '';
+  if(!cycle){
+    body = `
+      <button class="btn primary block" id="palletsInBtn_${panelId}" style="padding:16px; font-size:16px;">Pallets In — Start Cycle</button>
+    `;
+  } else {
+    const cycleLabel = cycle.pallets_in===1 ? `1 pallet — ${cycle.positions_in[0]}` : `2 pallets — Both`;
+    body += `<div class="timer-sub">Cycle running · ${cycleLabel}</div>`;
+    body += `<div class="timer-big nums" data-live="${cycle.cycleStart}">0:00</div>`;
+
+    if(!cycle.wrapStart){
+      body += `<button class="btn primary block" id="pullCordBtn_${panelId}" style="margin-top:8px;">Pull Cord — Start Wrap</button>`;
+    } else if(!cycle.wrapEnd){
+      body += `<div class="timer-sub" style="margin-top:8px;">Wrap time (10s alarm excluded)</div>`;
+      body += `<div class="timer-big nums" style="font-size:26px;" data-live="${cycle.wrapStart}" data-offset="10000">0:00</div>`;
+      body += `<button class="btn success block" id="wrapCompleteBtn_${panelId}" style="margin-top:8px;">Wrap Complete</button>`;
+    } else {
+      body += `<div class="hint" style="margin-top:6px;">Wrap complete — waiting for pickup / machine available</div>`;
+    }
+
+    // Active faults
+    if(cycle.activeFaults && cycle.activeFaults.length){
+      cycle.activeFaults.forEach((f,idx)=>{
+        body += `<div class="fault-item">
+          <span>${f.position} · ${f.cause}</span>
+          <span class="fdur nums" data-live="${f.start}">0:00</span>
+          <button class="btn small danger" data-stop-fault="${idx}" style="margin-left:8px;">Stop</button>
+        </div>`;
+      });
+    }
+
+    body += `<div class="pillrow" style="margin-top:12px;">
+      <button class="btn" id="logFaultBtn_${panelId}">Log Fault</button>
+      <button class="btn danger" id="endCycleBtn_${panelId}">Machine Available</button>
+    </div>`;
+  }
+
+  wrap.innerHTML = `
+    <div class="panel-head">
+      <span class="label">${label} · ${pair.name}</span>
+      <span class="badge ${cycle ? 'running' : ''}">${cycle ? 'Cycle active' : 'Session active'}</span>
+    </div>
+    <div class="hint">Started ${fmtDateTime(runtime.startedAt)} · counters started at ${wrs.map(w=>`${w.number}:${runtime.startCounters[w.id]??'—'}`).join(', ')}</div>
+    <div style="margin-top:10px;">${body}</div>
+    <div class="row between" style="margin-top:14px;">
+      <button class="btn small ghost" id="voiceNoteBtn_${panelId}">🎤 Note</button>
+      <button class="btn small ghost" id="endSessionBtn_${panelId}">End session</button>
+    </div>
+  `;
+
+  // wire events
+  const q = (sel)=>wrap.querySelector(sel);
+  if(q('#palletsInBtn_'+panelId)) q('#palletsInBtn_'+panelId).onclick = ()=> openPalletsInModal(panelId);
+  if(q('#pullCordBtn_'+panelId)) q('#pullCordBtn_'+panelId).onclick = ()=>{
+    runtime.activeCycle.wrapStart = Date.now();
+    save(); renderPanels();
+  };
+  if(q('#wrapCompleteBtn_'+panelId)) q('#wrapCompleteBtn_'+panelId).onclick = ()=>{
+    runtime.activeCycle.wrapEnd = Date.now();
+    save(); renderPanels();
+  };
+  if(q('#logFaultBtn_'+panelId)) q('#logFaultBtn_'+panelId).onclick = ()=> openFaultModal(panelId);
+  if(q('#endCycleBtn_'+panelId)) q('#endCycleBtn_'+panelId).onclick = ()=> openEndCycleModal(panelId);
+  if(q('#endSessionBtn_'+panelId)) q('#endSessionBtn_'+panelId).onclick = ()=> openEndSessionModal(panelId);
+  if(q('#voiceNoteBtn_'+panelId)) q('#voiceNoteBtn_'+panelId).onclick = ()=> openVoiceNoteModal(panelId);
+  wrap.querySelectorAll('[data-stop-fault]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const idx = Number(btn.dataset.stopFault);
+      const f = runtime.activeCycle.activeFaults[idx];
+      f.end = Date.now();
+      runtime.activeCycle.faults.push(f);
+      runtime.activeCycle.activeFaults.splice(idx,1);
+      save(); renderPanels();
+    };
+  });
+
+  return wrap;
+}
+
+/* ---- Start session ---- */
+function openStartSessionModal(panelId, pairId){
+  const pair = getPair(pairId);
+  const wrs = pairWrappers(pair);
+  const counterFields = wrs.map(w=>`
+    <div class="field"><label>${w.number} — starting cycle counter</label>
+      <input type="number" inputmode="numeric" id="m_counter_${w.id}" placeholder="e.g. 1000"></div>
+  `).join('');
+  const settingsFields = wrs.map(w=>`
+    <hr class="sep"><h3 style="font-size:13px;">${w.number} settings</h3>
+    <div class="settings-grid">
+      ${settingsInputs(w)}
+    </div>
+  `).join('');
+
+  openSheet(`Start session — ${pair.name}`, `
+    ${counterFields}
+    <div class="hint">Settings below are pre-filled from last known values — only change what's actually changed.</div>
+    ${settingsFields}
+  `, ()=>{
+    const startCounters = {};
+    wrs.forEach(w=>{
+      startCounters[w.id] = document.getElementById(`m_counter_${w.id}`).value;
+      // save settings snapshot back to wrapper as "last known"
+      w.settings = readSettingsInputs(w.id);
+    });
+    save();
+    state.panels[panelId] = {
+      sessionId: uid('sess'),
+      pairId: pairId,
+      startedAt: nowIso(),
+      startCounters,
+      settingsSnapshot: Object.fromEntries(wrs.map(w=>[w.id, {...w.settings}])),
+      cycles: [],
+      activeCycle: null,
+      notes: [],
+    };
+    save(); renderPanels(); closeSheet();
+    showToast('Session started');
+  }, 'Start');
+}
+function settingsInputs(w){
+  const fields = [
+    ['carriageUp','Carriage up'], ['carriageDown','Carriage down'], ['rotation','Rotation speed'],
+    ['filmTension','Film tension'], ['topWraps','Top wraps'], ['bottomWraps','Bottom wraps'], ['autoHeight','Auto height timer']
+  ];
+  return fields.map(([key,label])=>`
+    <div class="field"><label>${label}</label><input type="text" id="m_set_${w.id}_${key}" value="${w.settings[key]||''}"></div>
+  `).join('');
+}
+function readSettingsInputs(wid){
+  const keys = ['carriageUp','carriageDown','rotation','filmTension','topWraps','bottomWraps','autoHeight'];
+  const out = {};
+  keys.forEach(k=>{
+    const el = document.getElementById(`m_set_${wid}_${k}`);
+    out[k] = el ? el.value : '';
+  });
+  return out;
+}
+
+/* ---- Pallets in (start cycle) ---- */
+function openPalletsInModal(panelId){
+  openSheet('Pallets in', `
+    <div class="field"><label>How many pallets?</label>
+      <div class="chip-select" id="m_palletCount">
+        <div class="chip selected" data-val="2">2 (Both)</div>
+        <div class="chip" data-val="1">1</div>
+      </div>
+    </div>
+    <div class="field" id="m_positionField" style="display:none;">
+      <label>Which position?</label>
+      <div class="chip-select" id="m_position">
+        <div class="chip selected" data-val="Front">Front</div>
+        <div class="chip" data-val="Back">Back</div>
+      </div>
+    </div>
+  `, ()=>{
+    const count = Number(document.querySelector('#m_palletCount .chip.selected').dataset.val);
+    const positions = count===2 ? ['Both'] : [document.querySelector('#m_position .chip.selected').dataset.val];
+    const runtime = state.panels[panelId];
+    runtime.activeCycle = {
+      id: uid('cyc'),
+      cycleStart: Date.now(),
+      cycleEnd: null,
+      pallets_in: count,
+      positions_in: positions,
+      wrapStart: null,
+      wrapEnd: null,
+      faults: [],
+      activeFaults: [],
+      notWrapped: [],
+    };
+    save(); renderPanels(); closeSheet();
+  });
+  document.querySelectorAll('#m_palletCount .chip').forEach(c=>{
+    c.onclick = ()=>{
+      document.querySelectorAll('#m_palletCount .chip').forEach(x=>x.classList.remove('selected'));
+      c.classList.add('selected');
+      document.getElementById('m_positionField').style.display = c.dataset.val==='1' ? 'block':'none';
+    };
+  });
+  document.querySelectorAll('#m_position .chip').forEach(c=>{
+    c.onclick = ()=>{
+      document.querySelectorAll('#m_position .chip').forEach(x=>x.classList.remove('selected'));
+      c.classList.add('selected');
+    };
+  });
+}
+
+/* ---- Log fault ---- */
+function openFaultModal(panelId){
+  openSheet('Log fault', `
+    <div class="field"><label>Position</label>
+      <div class="chip-select" id="m_faultPos">
+        <div class="chip selected" data-val="Front">Front</div>
+        <div class="chip" data-val="Back">Back</div>
+        <div class="chip" data-val="Both">Both</div>
+      </div>
+    </div>
+    <div class="field"><label>Cause</label>
+      <div class="chip-select" id="m_faultCause">
+        <div class="chip selected" data-val="Machine">Machine</div>
+        <div class="chip" data-val="Human">Human</div>
+      </div>
+    </div>
+  `, ()=>{
+    const position = document.querySelector('#m_faultPos .chip.selected').dataset.val;
+    const cause = document.querySelector('#m_faultCause .chip.selected').dataset.val;
+    const runtime = state.panels[panelId];
+    runtime.activeCycle.activeFaults.push({ id: uid('flt'), position, cause, start: Date.now(), end: null });
+    save(); renderPanels(); closeSheet();
+  }, 'Start fault timer');
+  wireChipGroups(['m_faultPos','m_faultCause']);
+}
+function wireChipGroups(ids){
+  ids.forEach(id=>{
+    document.querySelectorAll('#'+id+' .chip').forEach(c=>{
+      c.onclick = ()=>{
+        document.querySelectorAll('#'+id+' .chip').forEach(x=>x.classList.remove('selected'));
+        c.classList.add('selected');
+      };
+    });
+  });
+}
+
+/* ---- End cycle (machine available) ---- */
+function openEndCycleModal(panelId){
+  const runtime = state.panels[panelId];
+  const cycle = runtime.activeCycle;
+  if(cycle.activeFaults && cycle.activeFaults.length){
+    return showToast('Stop active fault timers first');
+  }
+  const totalIn = cycle.pallets_in;
+  const countOptions = Array.from({length: totalIn+1}, (_,i)=>i).map(n=>`<div class="chip ${n===totalIn?'selected':''}" data-val="${n}">${n}</div>`).join('');
+
+  openSheet('Machine available — end cycle', `
+    <div class="field"><label>Pallets that ended up wrapped (of ${totalIn})</label>
+      <div class="chip-select" id="m_palletsOut">${countOptions}</div>
+    </div>
+    <div id="m_reasonsWrap"></div>
+  `, ()=>{
+    const palletsOut = Number(document.querySelector('#m_palletsOut .chip.selected').dataset.val);
+    const missing = totalIn - palletsOut;
+    const notWrapped = [];
+    for(let i=0;i<missing;i++){
+      const posSel = document.getElementById(`m_reason_pos_${i}`);
+      const reasonSel = document.getElementById(`m_reason_${i}`);
+      notWrapped.push({ position: posSel?posSel.value:cycle.positions_in[0], reason: reasonSel.value });
+    }
+    cycle.cycleEnd = Date.now();
+    cycle.palletsOut = palletsOut;
+    cycle.notWrapped = notWrapped;
+    runtime.cycles.push(cycle);
+    runtime.activeCycle = null;
+    save(); renderPanels(); closeSheet();
+    showToast('Cycle logged');
+  }, 'Finish cycle');
+
+  function renderReasonFields(missing){
+    const wrapEl = document.getElementById('m_reasonsWrap');
+    let html = '';
+    for(let i=0;i<missing;i++){
+      html += `<hr class="sep"><div class="field"><label>Not-wrapped pallet ${i+1} — position</label>
+        <select id="m_reason_pos_${i}">
+          ${cycle.positions_in.includes('Both') ? '<option value="Front">Front</option><option value="Back">Back</option>' : `<option value="${cycle.positions_in[0]}">${cycle.positions_in[0]}</option>`}
+        </select></div>
+        <div class="field"><label>Reason</label>
+        <select id="m_reason_${i}">${PRESET_REASONS.map(r=>`<option value="${r}">${r}</option>`).join('')}</select></div>`;
+    }
+    wrapEl.innerHTML = html;
+  }
+  renderReasonFields(totalIn - totalIn); // start with 0 missing (default selected = totalIn)
+  document.querySelectorAll('#m_palletsOut .chip').forEach(c=>{
+    c.onclick = ()=>{
+      document.querySelectorAll('#m_palletsOut .chip').forEach(x=>x.classList.remove('selected'));
+      c.classList.add('selected');
+      renderReasonFields(totalIn - Number(c.dataset.val));
+    };
+  });
+}
+
+/* ---- End session ---- */
+function openEndSessionModal(panelId){
+  const runtime = state.panels[panelId];
+  const pair = getPair(runtime.pairId);
+  const wrs = pairWrappers(pair);
+  if(runtime.activeCycle) return showToast('Finish the active cycle first');
+  const counterFields = wrs.map(w=>`
+    <div class="field"><label>${w.number} — ending cycle counter</label>
+      <input type="number" inputmode="numeric" id="m_endcounter_${w.id}" placeholder="e.g. 1042"></div>
+  `).join('');
+  openSheet('End session', `
+    <p class="hint" style="margin-bottom:10px;">${runtime.cycles.length} cycle(s) logged this session.</p>
+    ${counterFields}
+  `, ()=>{
+    const endCounters = {};
+    wrs.forEach(w=> endCounters[w.id] = document.getElementById(`m_endcounter_${w.id}`).value);
+    const finished = {
+      id: runtime.sessionId,
+      pairId: runtime.pairId,
+      startedAt: runtime.startedAt,
+      endedAt: nowIso(),
+      startCounters: runtime.startCounters,
+      endCounters,
+      settingsSnapshot: runtime.settingsSnapshot,
+      cycles: runtime.cycles,
+      notes: runtime.notes,
+    };
+    state.sessions.push(finished);
+    state.panels[panelId] = null;
+    save(); renderPanels(); closeSheet();
+    showToast('Session saved');
+  }, 'End session');
+}
+
+/* ---- Voice note (Web Speech API, best-effort) ---- */
+function openVoiceNoteModal(panelId){
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  openSheet('Add note', `
+    <div class="field">
+      <div class="row" style="gap:10px;">
+        <button class="mic-btn" id="m_micBtn">🎤</button>
+        <span class="hint" id="m_micStatus">${SpeechRec ? 'Tap mic to dictate, or just type' : 'Voice dictation not supported on this browser — type your note'}</span>
+      </div>
+    </div>
+    <div class="field"><textarea id="m_noteText" placeholder="e.g. Front position mechanical fault, kept shutting off"></textarea></div>
+  `, ()=>{
+    const text = document.getElementById('m_noteText').value.trim();
+    if(!text) return closeSheet();
+    state.panels[panelId].notes.push({ time: nowIso(), text });
+    save(); closeSheet(); showToast('Note saved');
+  });
+
+  if(SpeechRec){
+    const rec = new SpeechRec();
+    rec.continuous = true; rec.interimResults = true; rec.lang = 'en-US';
+    let recording = false;
+    const micBtn = document.getElementById('m_micBtn');
+    const status = document.getElementById('m_micStatus');
+    const textarea = document.getElementById('m_noteText');
+    let baseText = '';
+    rec.onresult = (e)=>{
+      let interim = '';
+      let final = '';
+      for(let i=e.resultIndex;i<e.results.length;i++){
+        if(e.results[i].isFinal) final += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
+      }
+      textarea.value = (baseText + ' ' + final + ' ' + interim).trim();
+      if(final) baseText = (baseText + ' ' + final).trim();
+    };
+    rec.onerror = ()=>{ recording=false; micBtn.classList.remove('recording'); status.textContent='Mic error — type instead'; };
+    rec.onend = ()=>{ if(recording){ rec.start(); } };
+    micBtn.onclick = ()=>{
+      recording = !recording;
+      micBtn.classList.toggle('recording', recording);
+      if(recording){ baseText = textarea.value; status.textContent='Listening…'; try{rec.start();}catch(e){} }
+      else{ status.textContent='Stopped'; try{rec.stop();}catch(e){} }
+    };
+  }
+}
+
+/* ---------------------------------------------------------------
+   HISTORY / EXPORT VIEW
+--------------------------------------------------------------- */
+function renderHistory(){
+  const list = document.getElementById('sessionsList');
+  const empty = document.getElementById('sessionsEmpty');
+  list.innerHTML = '';
+  if(state.sessions.length===0){ empty.style.display='block'; return; }
+  empty.style.display='none';
+  [...state.sessions].reverse().forEach(s=>{
+    const pair = getPair(s.pairId);
+    const div = document.createElement('div');
+    div.className='list-item';
+    div.innerHTML = `<span>${pair? pair.name:'Unknown pair'}<small>${fmtDateTime(s.startedAt)} → ${fmtDateTime(s.endedAt)} · ${s.cycles.length} cycles</small></span>`;
+    list.appendChild(div);
+  });
+}
+
+function buildCsv(){
+  const headers = [
+    'session_id','panel_started_at','panel_ended_at','system','pair','location','wrapper_ids','speed_class',
+    'start_counters','end_counters','settings_snapshot',
+    'cycle_id','cycle_start','cycle_end','cycle_duration_sec',
+    'pallets_in','positions_in','pallets_out_wrapped','not_wrapped_json',
+    'wrap_start','wrap_end','wrap_duration_sec',
+    'fault_id','fault_position','fault_cause','fault_start','fault_end','fault_duration_sec',
+    'session_notes'
+  ];
+  const rows = [headers];
+
+  state.sessions.forEach(s=>{
+    const pair = getPair(s.pairId);
+    const sys = pair ? getSystem(pair.systemId) : null;
+    const loc = sys ? getLocation(sys.locationId) : null;
+    const wrs = pair ? pairWrappers(pair) : [];
+    const wrapperIds = wrs.map(w=>w.number).join('|');
+    const speedClasses = [...new Set(wrs.map(w=>w.speedClass))].join('|');
+    const sessionNotes = (s.notes||[]).map(n=>`[${n.time}] ${n.text}`).join(' // ');
+
+    const baseRow = [
+      s.id, s.startedAt, s.endedAt,
+      sys?sys.name:'', pair?pair.name:'', loc?loc.name:'', wrapperIds, speedClasses,
+      JSON.stringify(s.startCounters), JSON.stringify(s.endCounters), JSON.stringify(s.settingsSnapshot),
+    ];
+
+    if(s.cycles.length===0){
+      rows.push([...baseRow, '','','','','','','','','','','','','','','','', sessionNotes]);
+      return;
+    }
+
+    s.cycles.forEach(c=>{
+      const cycleDurSec = c.cycleEnd ? Math.round((c.cycleEnd-c.cycleStart)/1000) : '';
+      const wrapDurSec = (c.wrapStart && c.wrapEnd) ? Math.max(0, Math.round((c.wrapEnd-c.wrapStart)/1000)-10) : '';
+      const faults = c.faults||[];
+      if(faults.length===0){
+        rows.push([
+          ...baseRow,
+          c.id, new Date(c.cycleStart).toISOString(), c.cycleEnd? new Date(c.cycleEnd).toISOString():'', cycleDurSec,
+          c.pallets_in, c.positions_in.join('|'), c.palletsOut??'', JSON.stringify(c.notWrapped||[]),
+          c.wrapStart? new Date(c.wrapStart).toISOString():'', c.wrapEnd? new Date(c.wrapEnd).toISOString():'', wrapDurSec,
+          '','','','','','',
+          sessionNotes
+        ]);
+      } else {
+        faults.forEach(f=>{
+          const faultDurSec = f.end ? Math.round((f.end-f.start)/1000) : '';
+          rows.push([
+            ...baseRow,
+            c.id, new Date(c.cycleStart).toISOString(), c.cycleEnd? new Date(c.cycleEnd).toISOString():'', cycleDurSec,
+            c.pallets_in, c.positions_in.join('|'), c.palletsOut??'', JSON.stringify(c.notWrapped||[]),
+            c.wrapStart? new Date(c.wrapStart).toISOString():'', c.wrapEnd? new Date(c.wrapEnd).toISOString():'', wrapDurSec,
+            f.id, f.position, f.cause, new Date(f.start).toISOString(), f.end? new Date(f.end).toISOString():'', faultDurSec,
+            sessionNotes
+          ]);
+        });
+      }
+    });
+  });
+
+  return rows.map(r=>r.map(csvEscape).join(',')).join('\n');
+}
+function csvEscape(v){
+  if(v===null||v===undefined) return '';
+  const s = String(v);
+  if(/[",\n]/.test(s)) return '"'+s.replace(/"/g,'""')+'"';
+  return s;
+}
+
+let lastCsvBlob = null;
+document.getElementById('exportCsvBtn').onclick = ()=>{
+  if(state.sessions.length===0) return showToast('No sessions to export yet');
+  const csv = buildCsv();
+  lastCsvBlob = new Blob([csv], {type:'text/csv'});
+  const filename = `wrap-throughput-${new Date().toISOString().slice(0,10)}.csv`;
+  const url = URL.createObjectURL(lastCsvBlob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  showToast('CSV downloaded');
+  const shareBtn = document.getElementById('shareCsvBtn');
+  if(navigator.canShare && navigator.canShare({files:[new File([lastCsvBlob], filename, {type:'text/csv'})]})){
+    shareBtn.style.display='block';
+    shareBtn.onclick = async ()=>{
+      try{
+        await navigator.share({ files:[new File([lastCsvBlob], filename, {type:'text/csv'})], title:'Wrap throughput data' });
+      }catch(e){ /* user cancelled */ }
+    };
+  }
+};
+
+/* ---------------------------------------------------------------
+   INIT
+--------------------------------------------------------------- */
+function renderAll(){
+  renderPanels();
+  renderSetup();
+  renderHistory();
+}
+renderAll();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
