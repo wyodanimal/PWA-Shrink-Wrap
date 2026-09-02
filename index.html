@@ -352,6 +352,10 @@ function pairLabel(pair){
   const sys = getSystem(pair.systemId);
   return pair.name + (sys? ' · '+sys.name : '');
 }
+function wrapperLabel(w){
+  const pair = getPair(w.pairId);
+  return w.number + (pair? ' · '+pair.name : '');
+}
 
 /* ---------------------------------------------------------------
    TAB NAV
@@ -596,21 +600,21 @@ function renderPanel(panelId){
   wrap.className = 'panel ' + stateClass;
 
   if(!runtime || !runtime.sessionId){
-    const pairOptions = state.pairs.map(p=>`<option value="${p.id}">${pairLabel(p)}</option>`).join('');
+    const wrapperOptions = state.wrappers.map(w=>`<option value="${w.id}">${wrapperLabel(w)}</option>`).join('');
     wrap.innerHTML = `
       <div class="panel-head"><span class="label">${panelId==='A'?'Left':'Right'}</span><span class="badge">Idle</span></div>
-      ${state.pairs.length===0 ? '<p class="empty">No pairs configured. Add one in Setup.</p>' : `
-      <div class="field"><label>Wrapper / pair</label><select id="pairSelect_${panelId}">${pairOptions}</select></div>
+      ${state.wrappers.length===0 ? '<p class="empty">No wrappers configured. Add one in Setup.</p>' : `
+      <div class="field"><label>Wrapper</label><select id="wrapperSelect_${panelId}">${wrapperOptions}</select></div>
       <button class="btn primary block" id="startSessionBtn_${panelId}">Start session</button>
       `}
     `;
-    if(state.pairs.length>0){
-      wrap.querySelector('#startSessionBtn_'+panelId).onclick = ()=> openStartSessionModal(panelId, wrap.querySelector('#pairSelect_'+panelId).value);
+    if(state.wrappers.length>0){
+      wrap.querySelector('#startSessionBtn_'+panelId).onclick = ()=> openStartSessionModal(panelId, wrap.querySelector('#wrapperSelect_'+panelId).value);
     }
     return wrap;
   }
 
-  const pair = getPair(runtime.pairId);
+  const wrapper = getWrapper(runtime.wrapperId);
 
   const canStart = !cycle;
   const canStartWrap = !!cycle && !cycle.wrapStart;
@@ -650,7 +654,7 @@ function renderPanel(panelId){
 
   wrap.innerHTML = `
     <div class="panel-head">
-      <span class="wname">${pair.name}</span>
+      <span class="wname">${wrapper.number}</span>
       <span class="badge ${cycle ? 'running' : ''}">${cycle ? 'Running' : 'Ready'}</span>
     </div>
     <div style="margin-top:6px;">${body}</div>
@@ -782,38 +786,24 @@ function openExceptionModal(panelId){
 
 
 /* ---- Start session ---- */
-function openStartSessionModal(panelId, pairId){
-  const pair = getPair(pairId);
-  const wrs = pairWrappers(pair);
-  const counterFields = wrs.map(w=>`
+function openStartSessionModal(panelId, wrapperId){
+  const w = getWrapper(wrapperId);
+
+  openSheet(`Start session — ${w.number}`, `
     <div class="field"><label>${w.number} — starting cycle counter</label>
       <input type="number" inputmode="numeric" id="m_counter_${w.id}" placeholder="e.g. 1000"></div>
-  `).join('');
-  const settingsFields = wrs.map(w=>`
-    <hr class="sep"><h3 style="font-size:13px;">${w.number} settings</h3>
-    <div class="settings-grid">
-      ${settingsInputs(w)}
-    </div>
-  `).join('');
-
-  openSheet(`Start session — ${pair.name}`, `
-    ${counterFields}
     <div class="hint">Settings below are pre-filled from last known values — only change what's actually changed.</div>
-    ${settingsFields}
+    <div class="settings-grid">${settingsInputs(w)}</div>
   `, ()=>{
-    const startCounters = {};
-    wrs.forEach(w=>{
-      startCounters[w.id] = document.getElementById(`m_counter_${w.id}`).value;
-      // save settings snapshot back to wrapper as "last known"
-      w.settings = readSettingsInputs(w.id);
-    });
+    const startCounter = document.getElementById(`m_counter_${w.id}`).value;
+    w.settings = readSettingsInputs(w.id);
     save();
     state.panels[panelId] = {
       sessionId: uid('sess'),
-      pairId: pairId,
+      wrapperId: wrapperId,
       startedAt: nowIso(),
-      startCounters,
-      settingsSnapshot: Object.fromEntries(wrs.map(w=>[w.id, {...w.settings}])),
+      startCounter,
+      settingsSnapshot: {...w.settings},
       cycles: [],
       activeCycle: null,
       notes: [],
@@ -855,26 +845,21 @@ function wireChipGroups(ids){
 /* ---- End session ---- */
 function openEndSessionModal(panelId){
   const runtime = state.panels[panelId];
-  const pair = getPair(runtime.pairId);
-  const wrs = pairWrappers(pair);
+  const w = getWrapper(runtime.wrapperId);
   if(runtime.activeCycle) return showToast('Finish the active cycle first');
-  const counterFields = wrs.map(w=>`
-    <div class="field"><label>${w.number} — ending cycle counter</label>
-      <input type="number" inputmode="numeric" id="m_endcounter_${w.id}" placeholder="e.g. 1042"></div>
-  `).join('');
   openSheet('End session', `
     <p class="hint" style="margin-bottom:10px;">${runtime.cycles.length} cycle(s) logged this session.</p>
-    ${counterFields}
+    <div class="field"><label>${w.number} — ending cycle counter</label>
+      <input type="number" inputmode="numeric" id="m_endcounter_${w.id}" placeholder="e.g. 1042"></div>
   `, ()=>{
-    const endCounters = {};
-    wrs.forEach(w=> endCounters[w.id] = document.getElementById(`m_endcounter_${w.id}`).value);
+    const endCounter = document.getElementById(`m_endcounter_${w.id}`).value;
     const finished = {
       id: runtime.sessionId,
-      pairId: runtime.pairId,
+      wrapperId: runtime.wrapperId,
       startedAt: runtime.startedAt,
       endedAt: nowIso(),
-      startCounters: runtime.startCounters,
-      endCounters,
+      startCounter: runtime.startCounter,
+      endCounter,
       settingsSnapshot: runtime.settingsSnapshot,
       cycles: runtime.cycles,
       notes: runtime.notes,
@@ -943,18 +928,18 @@ function renderHistory(){
   if(state.sessions.length===0){ empty.style.display='block'; return; }
   empty.style.display='none';
   [...state.sessions].reverse().forEach(s=>{
-    const pair = getPair(s.pairId);
+    const w = getWrapper(s.wrapperId);
     const div = document.createElement('div');
     div.className='list-item';
-    div.innerHTML = `<span>${pair? pair.name:'Unknown pair'}<small>${fmtDateTime(s.startedAt)} → ${fmtDateTime(s.endedAt)} · ${s.cycles.length} cycles</small></span>`;
+    div.innerHTML = `<span>${w? w.number:'Unknown wrapper'}<small>${fmtDateTime(s.startedAt)} → ${fmtDateTime(s.endedAt)} · ${s.cycles.length} cycles</small></span>`;
     list.appendChild(div);
   });
 }
 
 function buildCsv(){
   const headers = [
-    'session_id','session_started_at','session_ended_at','system','pair','location','wrapper_ids','speed_class',
-    'start_counters','end_counters','settings_snapshot',
+    'session_id','session_started_at','session_ended_at','wrapper','system','pair','location','speed_class',
+    'start_counter','end_counter','settings_snapshot',
     'cycle_id','cycle_start','cycle_end','cycle_duration_sec',
     'single_pallet','wrap_start','wrap_end','wrap_duration_sec',
     'exceptions_json',
@@ -964,18 +949,16 @@ function buildCsv(){
   const rows = [headers];
 
   state.sessions.forEach(s=>{
-    const pair = getPair(s.pairId);
+    const w = getWrapper(s.wrapperId);
+    const pair = w ? getPair(w.pairId) : null;
     const sys = pair ? getSystem(pair.systemId) : null;
     const loc = sys ? getLocation(sys.locationId) : null;
-    const wrs = pair ? pairWrappers(pair) : [];
-    const wrapperIds = wrs.map(w=>w.number).join('|');
-    const speedClasses = [...new Set(wrs.map(w=>w.speedClass))].join('|');
     const sessionNotes = (s.notes||[]).map(n=>`[${n.time}] ${n.text}`).join(' // ');
 
     const baseRow = [
       s.id, s.startedAt, s.endedAt,
-      sys?sys.name:'', pair?pair.name:'', loc?loc.name:'', wrapperIds, speedClasses,
-      JSON.stringify(s.startCounters), JSON.stringify(s.endCounters), JSON.stringify(s.settingsSnapshot),
+      w?w.number:'', sys?sys.name:'', pair?pair.name:'', loc?loc.name:'', w?w.speedClass:'',
+      s.startCounter??'', s.endCounter??'', JSON.stringify(s.settingsSnapshot||{}),
     ];
 
     if(s.cycles.length===0){
