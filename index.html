@@ -45,14 +45,22 @@
   nav.tabs button .dot{width:6px;height:6px;border-radius:50%;background:transparent;}
   nav.tabs button.active{color:var(--accent);}
   nav.tabs button.active .dot{background:var(--accent);}
-  main{padding:14px 14px 12px; max-width:900px; margin:0 auto;}
-  #panelsContainer{display:flex; gap:8px; align-items:flex-start;}
-  #panelsContainer.single{display:block;}
-  #panelsContainer:not(.single) .panel{flex:1; min-width:0; padding:10px;}
-  #panelsContainer:not(.single) .timer-big{font-size:24px;}
-  #panelsContainer:not(.single) .panel-head .label{font-size:9.5px;}
-  #panelsContainer:not(.single) .hint{font-size:10px;}
-  #panelsContainer:not(.single) .btn{font-size:12px; padding:9px 6px;}
+  main{padding:10px 8px 12px; max-width:900px; margin:0 auto;}
+  #panelsContainer{display:flex; gap:6px; align-items:flex-start;}
+  #panelsContainer .panel{flex:1; min-width:0; padding:9px;}
+  #panelsContainer .timer-big{font-size:22px;}
+  #panelsContainer .timer-mid{font-size:15px; font-weight:700;}
+  #panelsContainer .panel-head .label{font-size:9px;}
+  #panelsContainer .panel-head .wname{font-size:15px;}
+  #panelsContainer .hint{font-size:9.5px;}
+  #panelsContainer .btn{font-size:12px; padding:9px 5px;}
+  #panelsContainer .btn.small{font-size:10.5px; padding:6px 4px;}
+  .btnstack{display:flex; flex-direction:column; gap:5px; margin-top:8px;}
+  .quickrow{display:flex; gap:5px; margin-top:8px;}
+  .quickrow .btn{flex:1;}
+  .btn.err-active{background:var(--danger); color:#fff; border-color:var(--danger); animation:pulse 1.4s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.7;}}
+  .btn.single-active{background:var(--machine); color:#fff; border-color:var(--machine);}
   .view{display:none;}
   .view.active{display:block;}
   .card{
@@ -127,3 +135,927 @@
   }
   .sheet{
     background:var(--surface); border-radius:14px 14px 0 0; width:100%; max-width:640px;
+    padding:16px 16px calc(16px + env(safe-area-inset-bottom)); max-height:88vh; overflow-y:auto;
+  }
+  .sheet h3{margin:0 0 12px;}
+  .close-x{background:none;border:none;color:var(--text-dim);font-size:20px;line-height:1;padding:4px 8px;}
+  .modal-actions{display:flex; gap:8px; margin-top:14px;}
+  .modal-actions .btn{flex:1;}
+  select[multiple]{min-height:80px;}
+  .chip-select{display:flex; gap:6px; flex-wrap:wrap;}
+  .chip{
+    padding:8px 12px; border-radius:20px; border:1px solid var(--border); background:var(--surface-2);
+    font-size:13px; color:var(--text-dim);
+  }
+  .chip.selected{background:var(--accent); color:#1A1300; border-color:var(--accent); font-weight:600;}
+  .settings-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .hint{font-size:11.5px; color:var(--text-faint); margin-top:3px;}
+  hr.sep{border:none; border-top:1px solid var(--border); margin:12px 0;}
+  .toast{
+    position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+    background:var(--surface-3); color:var(--text); padding:10px 16px; border-radius:20px;
+    font-size:13px; z-index:200; border:1px solid var(--border); opacity:0; transition:opacity .2s;
+    pointer-events:none;
+  }
+  .toast.show{opacity:1;}
+  .mic-btn{
+    width:44px; height:44px; border-radius:50%; border:1px solid var(--border);
+    background:var(--surface-2); color:var(--text-dim); display:flex; align-items:center; justify-content:center;
+    font-size:18px; flex-shrink:0;
+  }
+  .mic-btn.recording{background:var(--danger); color:#fff; border-color:var(--danger);}
+</style>
+</head>
+<body>
+
+<header class="app">
+  <h1>Wrap Throughput Timer</h1>
+  <p id="headerSub">Cycle · wrap · fault tracking for pallet wrappers</p>
+</header>
+
+<main>
+  <!-- TIMER VIEW -->
+  <div class="view active" id="view-timer">
+    <div class="row between" style="margin-bottom:10px;">
+      <div class="badge" id="dateBadge"></div>
+    </div>
+    <div id="panelsContainer"></div>
+  </div>
+
+  <!-- SETUP VIEW -->
+  <div class="view" id="view-setup">
+    <div class="card">
+      <h2>Locations</h2>
+      <div id="locationsList" class="stack"></div>
+      <div class="row" style="margin-top:10px; gap:8px;">
+        <input type="text" id="newLocationName" placeholder="New location name">
+        <button class="btn" id="addLocationBtn">Add</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Systems</h2>
+      <div id="systemsList" class="stack"></div>
+      <button class="btn block" id="addSystemBtn" style="margin-top:8px;">+ Add system</button>
+    </div>
+
+    <div class="card">
+      <h2>Pairs</h2>
+      <div id="pairsList" class="stack"></div>
+      <button class="btn block" id="addPairBtn" style="margin-top:8px;">+ Add pair</button>
+    </div>
+
+    <div class="card">
+      <h2>Wrappers</h2>
+      <div id="wrappersList" class="stack"></div>
+      <button class="btn block" id="addWrapperBtn" style="margin-top:8px;">+ Add wrapper</button>
+    </div>
+
+    <div class="card">
+      <h2>Reset</h2>
+      <button class="btn danger block" id="loadDefaultsBtn">Load starter defaults (SW0037/38, example low-speed pairs)</button>
+      <button class="btn ghost block" id="wipeBtn" style="margin-top:8px;">Erase all data</button>
+    </div>
+  </div>
+
+  <!-- HISTORY / EXPORT VIEW -->
+  <div class="view" id="view-history">
+    <div class="card">
+      <h2>Sessions logged</h2>
+      <div id="sessionsList" class="stack"></div>
+      <p class="empty" id="sessionsEmpty" style="display:none;">No completed sessions yet.</p>
+    </div>
+    <div class="card">
+      <h2>Export</h2>
+      <p class="hint" style="margin-bottom:10px;">One row per error (or one row per cycle if none). Includes session, wrapper/pair/system, timestamps, durations, and exceptions — ready for a dashboard to ingest.</p>
+      <button class="btn primary block" id="exportCsvBtn">Export CSV</button>
+      <button class="btn block" id="shareCsvBtn" style="margin-top:8px; display:none;">Share / Email CSV</button>
+    </div>
+  </div>
+</main>
+
+<nav class="tabs">
+  <button data-view="timer" class="active"><span class="dot"></span>Timer</button>
+  <button data-view="setup"><span class="dot"></span>Setup</button>
+  <button data-view="history"><span class="dot"></span>History / Export</button>
+</nav>
+
+<div id="modalRoot"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------------------------------------------------------------
+   STATE
+--------------------------------------------------------------- */
+const STORE_KEY = 'wrapTimerState_v1';
+const PRESET_REASONS = ['Jam','Fault','Wrong size','Other'];
+
+function uid(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
+
+function defaultState(){
+  return {
+    locations: [
+      {id:uid('loc'), name:'High Side Dry'},
+      {id:uid('loc'), name:'Low Side Dry'},
+      {id:uid('loc'), name:'FDD Receiving'},
+      {id:uid('loc'), name:'FDD Eggs'},
+      {id:uid('loc'), name:'FDD High Speeds'},
+      {id:uid('loc'), name:'FDD Elevators'},
+    ],
+    systems: [],
+    pairs: [],
+    wrappers: [],
+    sessions: [],
+    panels: { A: null, B: null }, // in-progress session+cycle runtime state
+  };
+}
+
+let state = load();
+
+function load(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){ console.error('load failed', e); }
+  return defaultState();
+}
+function save(){
+  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+}
+function loadStarterDefaults(){
+  const highLoc = state.locations.find(l=>l.name==='FDD High Speeds') || state.locations[0];
+  const lowLoc = state.locations.find(l=>l.name==='Low Side Dry') || state.locations[0];
+
+  const sys1 = {id:uid('sys'), name:'High Speed System 38/39', locationId:highLoc.id, pairIds:[]};
+  const pair1 = {id:uid('pair'), name:'SW0038/0039', systemId:sys1.id, wrapperIds:[]};
+  const w38 = mkWrapper('SW0038','high',pair1.id);
+  const w39 = mkWrapper('SW0039','high',pair1.id);
+  pair1.wrapperIds = [w38.id, w39.id];
+  sys1.pairIds = [pair1.id];
+
+  const sys2 = {id:uid('sys'), name:'Low Speed System 19-23', locationId:lowLoc.id, pairIds:[]};
+  const pairA = {id:uid('pair'), name:'SW0019/0020', systemId:sys2.id, wrapperIds:[]};
+  const w19 = mkWrapper('SW0019','low',pairA.id);
+  const w20 = mkWrapper('SW0020','low',pairA.id);
+  pairA.wrapperIds=[w19.id,w20.id];
+  const pairB = {id:uid('pair'), name:'SW0022/0023', systemId:sys2.id, wrapperIds:[]};
+  const w22 = mkWrapper('SW0022','low',pairB.id);
+  const w23 = mkWrapper('SW0023','low',pairB.id);
+  pairB.wrapperIds=[w22.id,w23.id];
+  sys2.pairIds=[pairA.id, pairB.id];
+
+  state.systems.push(sys1, sys2);
+  state.pairs.push(pair1, pairA, pairB);
+  state.wrappers.push(w38,w39,w19,w20,w22,w23);
+  save();
+  renderAll();
+  showToast('Starter defaults loaded');
+}
+function mkWrapper(number, speedClass, pairId){
+  return {
+    id:uid('wr'), number, speedClass, pairId,
+    settings:{ carriageUp:'', carriageDown:'', rotation:'', filmTension:'', topWraps:'', bottomWraps:'', autoHeight:'' }
+  };
+}
+
+/* ---------------------------------------------------------------
+   HELPERS
+--------------------------------------------------------------- */
+function fmtDur(ms){
+  if(ms==null || ms<0) ms=0;
+  const s = Math.floor(ms/1000);
+  const h = Math.floor(s/3600);
+  const m = Math.floor((s%3600)/60);
+  const sec = s%60;
+  if(h>0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  return `${m}:${String(sec).padStart(2,'0')}`;
+}
+function nowIso(){ return new Date().toISOString(); }
+function fmtDateTime(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(()=>t.classList.remove('show'), 1800);
+}
+function getPair(id){ return state.pairs.find(p=>p.id===id); }
+function getSystem(id){ return state.systems.find(s=>s.id===id); }
+function getWrapper(id){ return state.wrappers.find(w=>w.id===id); }
+function getLocation(id){ return state.locations.find(l=>l.id===id); }
+function pairWrappers(pair){ return pair.wrapperIds.map(getWrapper).filter(Boolean); }
+function pairLabel(pair){
+  const sys = getSystem(pair.systemId);
+  return pair.name + (sys? ' · '+sys.name : '');
+}
+
+/* ---------------------------------------------------------------
+   TAB NAV
+--------------------------------------------------------------- */
+document.querySelectorAll('nav.tabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+    if(btn.dataset.view==='history') renderHistory();
+    if(btn.dataset.view==='setup') renderSetup();
+  });
+});
+
+/* ---------------------------------------------------------------
+   SETUP VIEW RENDERING
+--------------------------------------------------------------- */
+function renderSetup(){
+  // Locations
+  const locList = document.getElementById('locationsList');
+  locList.innerHTML = '';
+  if(state.locations.length===0) locList.innerHTML = '<p class="empty">No locations yet.</p>';
+  state.locations.forEach(loc=>{
+    const div = document.createElement('div');
+    div.className = 'list-item';
+    div.innerHTML = `<span>${loc.name}</span>`;
+    const del = document.createElement('button');
+    del.className='btn small ghost'; del.textContent='Remove';
+    del.onclick=()=>{ state.locations = state.locations.filter(l=>l.id!==loc.id); save(); renderSetup(); };
+    div.appendChild(del);
+    locList.appendChild(div);
+  });
+
+  // Systems
+  const sysList = document.getElementById('systemsList');
+  sysList.innerHTML = '';
+  if(state.systems.length===0) sysList.innerHTML = '<p class="empty">No systems yet.</p>';
+  state.systems.forEach(sys=>{
+    const loc = getLocation(sys.locationId);
+    const div = document.createElement('div');
+    div.className = 'list-item';
+    div.innerHTML = `<span>${sys.name}<small>${loc? loc.name:'No location'} · ${sys.pairIds.length} pair(s)</small></span>`;
+    const del = document.createElement('button');
+    del.className='btn small ghost'; del.textContent='Remove';
+    del.onclick=()=>{
+      state.systems = state.systems.filter(s=>s.id!==sys.id);
+      save(); renderSetup();
+    };
+    div.appendChild(del);
+    sysList.appendChild(div);
+  });
+
+  // Pairs
+  const pairList = document.getElementById('pairsList');
+  pairList.innerHTML = '';
+  if(state.pairs.length===0) pairList.innerHTML = '<p class="empty">No pairs yet.</p>';
+  state.pairs.forEach(pair=>{
+    const sys = getSystem(pair.systemId);
+    const wrs = pairWrappers(pair);
+    const div = document.createElement('div');
+    div.className = 'list-item';
+    div.innerHTML = `<span>${pair.name}<small>${sys?sys.name:'No system'} · ${wrs.map(w=>w.number).join(', ')||'no wrappers'}</small></span>`;
+    const del = document.createElement('button');
+    del.className='btn small ghost'; del.textContent='Remove';
+    del.onclick=()=>{
+      state.pairs = state.pairs.filter(p=>p.id!==pair.id);
+      state.systems.forEach(s=> s.pairIds = s.pairIds.filter(id=>id!==pair.id));
+      save(); renderSetup();
+    };
+    div.appendChild(del);
+    pairList.appendChild(div);
+  });
+
+  // Wrappers
+  const wrList = document.getElementById('wrappersList');
+  wrList.innerHTML = '';
+  if(state.wrappers.length===0) wrList.innerHTML = '<p class="empty">No wrappers yet.</p>';
+  state.wrappers.forEach(w=>{
+    const pair = getPair(w.pairId);
+    const div = document.createElement('div');
+    div.className = 'list-item';
+    div.innerHTML = `<span>${w.number} <span class="badge">${w.speedClass}</span><small>${pair?pair.name:'unassigned pair'}</small></span>`;
+    const del = document.createElement('button');
+    del.className='btn small ghost'; del.textContent='Remove';
+    del.onclick=()=>{
+      state.wrappers = state.wrappers.filter(x=>x.id!==w.id);
+      state.pairs.forEach(p=> p.wrapperIds = p.wrapperIds.filter(id=>id!==w.id));
+      save(); renderSetup();
+    };
+    div.appendChild(del);
+    wrList.appendChild(div);
+  });
+}
+
+document.getElementById('addLocationBtn').onclick = ()=>{
+  const input = document.getElementById('newLocationName');
+  const name = input.value.trim();
+  if(!name) return;
+  state.locations.push({id:uid('loc'), name});
+  input.value='';
+  save(); renderSetup();
+};
+document.getElementById('loadDefaultsBtn').onclick = loadStarterDefaults;
+document.getElementById('wipeBtn').onclick = ()=>{
+  openConfirm('Erase all data?','This clears every wrapper, pair, session, and log. This cannot be undone.', ()=>{
+    state = defaultState(); save(); renderAll();
+  });
+};
+
+document.getElementById('addSystemBtn').onclick = ()=> openSystemModal();
+document.getElementById('addPairBtn').onclick = ()=> openPairModal();
+document.getElementById('addWrapperBtn').onclick = ()=> openWrapperModal();
+
+function openSystemModal(){
+  const locOptions = state.locations.map(l=>`<option value="${l.id}">${l.name}</option>`).join('');
+  openSheet('New system', `
+    <div class="field"><label>System name</label><input type="text" id="m_sysName" placeholder="e.g. High Speed System 38/39"></div>
+    <div class="field"><label>Location</label><select id="m_sysLoc">${locOptions}</select></div>
+  `, ()=>{
+    const name = document.getElementById('m_sysName').value.trim();
+    if(!name) return showToast('Enter a system name');
+    const locationId = document.getElementById('m_sysLoc').value;
+    state.systems.push({id:uid('sys'), name, locationId, pairIds:[]});
+    save(); renderSetup(); closeSheet();
+  });
+}
+function openPairModal(){
+  const sysOptions = state.systems.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  if(state.systems.length===0) return showToast('Add a system first');
+  openSheet('New pair', `
+    <div class="field"><label>Pair name</label><input type="text" id="m_pairName" placeholder="e.g. SW0020/0021"></div>
+    <div class="field"><label>System</label><select id="m_pairSys">${sysOptions}</select></div>
+  `, ()=>{
+    const name = document.getElementById('m_pairName').value.trim();
+    if(!name) return showToast('Enter a pair name');
+    const systemId = document.getElementById('m_pairSys').value;
+    const pair = {id:uid('pair'), name, systemId, wrapperIds:[]};
+    state.pairs.push(pair);
+    getSystem(systemId).pairIds.push(pair.id);
+    save(); renderSetup(); closeSheet();
+  });
+}
+function openWrapperModal(){
+  const pairOptions = state.pairs.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  if(state.pairs.length===0) return showToast('Add a pair first');
+  openSheet('New wrapper', `
+    <div class="field"><label>Wrapper number</label><input type="text" id="m_wrNum" placeholder="e.g. SW0021"></div>
+    <div class="field"><label>Speed class</label>
+      <div class="chip-select" id="m_wrSpeed">
+        <div class="chip selected" data-val="high">High speed</div>
+        <div class="chip" data-val="low">Low speed</div>
+      </div>
+    </div>
+    <div class="field"><label>Pair</label><select id="m_wrPair">${pairOptions}</select></div>
+  `, ()=>{
+    const number = document.getElementById('m_wrNum').value.trim();
+    if(!number) return showToast('Enter a wrapper number');
+    const speedClass = document.querySelector('#m_wrSpeed .chip.selected').dataset.val;
+    const pairId = document.getElementById('m_wrPair').value;
+    const w = mkWrapper(number, speedClass, pairId);
+    state.wrappers.push(w);
+    getPair(pairId).wrapperIds.push(w.id);
+    save(); renderSetup(); closeSheet();
+  });
+  document.querySelectorAll('#m_wrSpeed .chip').forEach(c=>{
+    c.onclick = ()=>{
+      document.querySelectorAll('#m_wrSpeed .chip').forEach(x=>x.classList.remove('selected'));
+      c.classList.add('selected');
+    };
+  });
+}
+
+/* ---------------------------------------------------------------
+   MODAL / SHEET UTILITIES
+--------------------------------------------------------------- */
+function openSheet(title, bodyHtml, onSave, saveLabel){
+  const root = document.getElementById('modalRoot');
+  root.innerHTML = `
+    <div class="overlay" id="ov">
+      <div class="sheet">
+        <div class="row between"><h3>${title}</h3><button class="close-x" id="ovClose">&times;</button></div>
+        <div id="ovBody">${bodyHtml}</div>
+        <div class="modal-actions">
+          <button class="btn ghost" id="ovCancel">Cancel</button>
+          <button class="btn primary" id="ovSave">${saveLabel||'Save'}</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('ovClose').onclick = closeSheet;
+  document.getElementById('ovCancel').onclick = closeSheet;
+  document.getElementById('ovSave').onclick = onSave;
+}
+function closeSheet(){ document.getElementById('modalRoot').innerHTML=''; }
+function openConfirm(title, msg, onConfirm){
+  openSheet(title, `<p style="color:var(--text-dim); font-size:14px;">${msg}</p>`, ()=>{ onConfirm(); closeSheet(); }, 'Confirm');
+}
+
+/* ---------------------------------------------------------------
+   TIMER VIEW — PANELS
+--------------------------------------------------------------- */
+document.getElementById('dateBadge').textContent = new Date().toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+
+let tickTimer = null;
+function startTicking(){
+  if(tickTimer) return;
+  tickTimer = setInterval(()=>{
+    document.querySelectorAll('[data-live]').forEach(el=>{
+      const start = Number(el.dataset.live);
+      el.textContent = fmtDur(Date.now()-start);
+    });
+  },500);
+}
+startTicking();
+
+function renderPanels(){
+  const container = document.getElementById('panelsContainer');
+  container.innerHTML = '';
+  ['A','B'].forEach(pid=> container.appendChild(renderPanel(pid)));
+}
+
+function newCycle(){
+  return {
+    id: uid('cyc'),
+    start: Date.now(),
+    wrapStart: null,
+    wrapEnd: null,
+    cycleEnd: null,
+    singlePallet: false,
+    errors: [],
+    activeError: null,
+    exceptions: [],
+  };
+}
+
+function renderPanel(panelId){
+  const wrap = document.createElement('div');
+  const runtime = state.panels[panelId];
+  const cycle = runtime && runtime.activeCycle;
+  let stateClass = 'state-idle';
+  if(cycle){ stateClass = cycle.activeError ? 'state-fault' : 'state-cycle'; }
+  wrap.className = 'panel ' + stateClass;
+
+  if(!runtime || !runtime.sessionId){
+    const pairOptions = state.pairs.map(p=>`<option value="${p.id}">${pairLabel(p)}</option>`).join('');
+    wrap.innerHTML = `
+      <div class="panel-head"><span class="label">${panelId==='A'?'Left':'Right'}</span><span class="badge">Idle</span></div>
+      ${state.pairs.length===0 ? '<p class="empty">No pairs configured. Add one in Setup.</p>' : `
+      <div class="field"><label>Wrapper / pair</label><select id="pairSelect_${panelId}">${pairOptions}</select></div>
+      <button class="btn primary block" id="startSessionBtn_${panelId}">Start session</button>
+      `}
+    `;
+    if(state.pairs.length>0){
+      wrap.querySelector('#startSessionBtn_'+panelId).onclick = ()=> openStartSessionModal(panelId, wrap.querySelector('#pairSelect_'+panelId).value);
+    }
+    return wrap;
+  }
+
+  const pair = getPair(runtime.pairId);
+
+  const canStart = !cycle;
+  const canStartWrap = !!cycle && !cycle.wrapStart;
+  const canEndWrap = !!cycle && !!cycle.wrapStart && !cycle.wrapEnd && !cycle.activeError;
+  const canCycleComplete = !!cycle;
+
+  let body = '';
+  if(cycle){
+    body += `<div class="timer-sub">Cycle</div><div class="timer-big nums" data-live="${cycle.start}">0:00</div>`;
+    if(cycle.wrapStart){
+      body += `<div class="timer-sub" style="margin-top:4px;">Wrap</div><div class="timer-mid nums" data-live="${cycle.wrapStart}">0:00</div>`;
+    }
+    if(cycle.activeError){
+      body += `<div class="timer-sub" style="margin-top:4px; color:var(--danger);">Error (${cycle.activeError.cause})</div><div class="timer-mid nums" style="color:var(--danger);" data-live="${cycle.activeError.start}">0:00</div>`;
+    }
+  } else {
+    body += `<p class="hint">Tap Start the instant the pallets cross the entry light bar.</p>`;
+  }
+
+  body += `<div class="btnstack">
+    <button class="btn primary" id="startBtn_${panelId}" ${canStart?'':'disabled'}>Start</button>
+    <button class="btn primary" id="startWrapBtn_${panelId}" ${canStartWrap?'':'disabled'}>Start Wrap Cycle</button>
+    <button class="btn success" id="endWrapBtn_${panelId}" ${canEndWrap?'':'disabled'}>End Wrap Cycle</button>
+    <button class="btn danger" id="cycleCompleteBtn_${panelId}" ${canCycleComplete?'':'disabled'}>Cycle Complete</button>
+  </div>`;
+
+  if(cycle){
+    body += `<div class="quickrow">
+      <button class="btn small ${cycle.singlePallet?'single-active':''}" id="singleBtn_${panelId}">1 pallet</button>
+      <button class="btn small ${cycle.activeError?'err-active':''}" id="errorBtn_${panelId}">${cycle.activeError?'Error Clear':'Wrapper Error'}</button>
+      <button class="btn small" id="exceptionBtn_${panelId}">Exception</button>
+    </div>`;
+    if(cycle.errors.length){
+      body += `<div class="hint" style="margin-top:6px;">${cycle.errors.length} error(s) logged this cycle</div>`;
+    }
+  }
+
+  wrap.innerHTML = `
+    <div class="panel-head">
+      <span class="wname">${pair.name}</span>
+      <span class="badge ${cycle ? 'running' : ''}">${cycle ? 'Running' : 'Ready'}</span>
+    </div>
+    <div style="margin-top:6px;">${body}</div>
+    <div class="row between" style="margin-top:10px;">
+      <button class="btn small ghost" id="voiceNoteBtn_${panelId}">🎤</button>
+      <button class="btn small ghost" id="endSessionBtn_${panelId}">End session</button>
+    </div>
+  `;
+
+  const q = (sel)=>wrap.querySelector(sel);
+  if(q('#startBtn_'+panelId)) q('#startBtn_'+panelId).onclick = ()=>{
+    runtime.activeCycle = newCycle();
+    save(); renderPanels();
+  };
+  if(q('#startWrapBtn_'+panelId)) q('#startWrapBtn_'+panelId).onclick = ()=>{
+    runtime.activeCycle.wrapStart = Date.now();
+    save(); renderPanels();
+  };
+  if(q('#endWrapBtn_'+panelId)) q('#endWrapBtn_'+panelId).onclick = ()=>{
+    runtime.activeCycle.wrapEnd = Date.now();
+    save(); renderPanels();
+  };
+  if(q('#cycleCompleteBtn_'+panelId)) q('#cycleCompleteBtn_'+panelId).onclick = ()=>{
+    const c = runtime.activeCycle;
+    c.cycleEnd = Date.now();
+    runtime.cycles.push(c);
+    runtime.activeCycle = null;
+    save(); renderPanels();
+  };
+  if(q('#singleBtn_'+panelId)) q('#singleBtn_'+panelId).onclick = ()=>{
+    runtime.activeCycle.singlePallet = !runtime.activeCycle.singlePallet;
+    save(); renderPanels();
+  };
+  if(q('#errorBtn_'+panelId)) q('#errorBtn_'+panelId).onclick = ()=>{
+    if(runtime.activeCycle.activeError){
+      runtime.activeCycle.activeError.end = Date.now();
+      openResolvedByModal(panelId);
+    } else {
+      runtime.activeCycle.activeError = { start: Date.now(), cause:null, subcategory:null, end:null, resolvedBy:null };
+      save(); renderPanels();
+      openErrorCauseModal(panelId);
+    }
+  };
+  if(q('#exceptionBtn_'+panelId)) q('#exceptionBtn_'+panelId).onclick = ()=> openExceptionModal(panelId);
+  if(q('#endSessionBtn_'+panelId)) q('#endSessionBtn_'+panelId).onclick = ()=> openEndSessionModal(panelId);
+  if(q('#voiceNoteBtn_'+panelId)) q('#voiceNoteBtn_'+panelId).onclick = ()=> openVoiceNoteModal(panelId);
+
+  return wrap;
+}
+
+/* ---- Wrapper error popups (no time pressure — machine's down) ---- */
+function openErrorCauseModal(panelId){
+  openSheet('Error cause', `
+    <div class="field"><label>Human or machine?</label>
+      <div class="chip-select" id="m_cause">
+        <div class="chip" data-val="Machine">Machine</div>
+        <div class="chip" data-val="Human">Human</div>
+      </div>
+    </div>
+    <div class="field" id="m_subcatField" style="display:none;">
+      <label>Machine issue type</label>
+      <div class="chip-select" id="m_subcat">
+        <div class="chip" data-val="Shrink-wrap">Shrink-wrap</div>
+        <div class="chip" data-val="Safety system">Safety system</div>
+        <div class="chip" data-val="Hoop">Hoop</div>
+        <div class="chip" data-val="Other">Other</div>
+      </div>
+    </div>
+  `, ()=>{
+    const causeChip = document.querySelector('#m_cause .chip.selected');
+    if(!causeChip) return showToast('Pick human or machine');
+    const cause = causeChip.dataset.val;
+    let subcategory = null;
+    if(cause==='Machine'){
+      const subChip = document.querySelector('#m_subcat .chip.selected');
+      if(!subChip) return showToast('Pick a machine issue type');
+      subcategory = subChip.dataset.val;
+    }
+    const runtime = state.panels[panelId];
+    runtime.activeCycle.activeError.cause = cause;
+    runtime.activeCycle.activeError.subcategory = subcategory;
+    save(); renderPanels(); closeSheet();
+  }, 'Save');
+  document.querySelectorAll('#m_cause .chip').forEach(c=>{
+    c.onclick = ()=>{
+      document.querySelectorAll('#m_cause .chip').forEach(x=>x.classList.remove('selected'));
+      c.classList.add('selected');
+      document.getElementById('m_subcatField').style.display = c.dataset.val==='Machine' ? 'block':'none';
+    };
+  });
+  wireChipGroups(['m_subcat']);
+}
+function openResolvedByModal(panelId){
+  openSheet('Who resolved it?', `
+    <div class="field">
+      <div class="chip-select" id="m_resolvedBy">
+        <div class="chip" data-val="Operations">Operations</div>
+        <div class="chip" data-val="Maintenance">Maintenance</div>
+      </div>
+    </div>
+  `, ()=>{
+    const chip = document.querySelector('#m_resolvedBy .chip.selected');
+    if(!chip) return showToast('Pick operations or maintenance');
+    const runtime = state.panels[panelId];
+    const err = runtime.activeCycle.activeError;
+    err.resolvedBy = chip.dataset.val;
+    runtime.activeCycle.errors.push(err);
+    runtime.activeCycle.activeError = null;
+    save(); renderPanels(); closeSheet();
+  }, 'Save');
+  wireChipGroups(['m_resolvedBy']);
+}
+
+/* ---- Not-wrapped exception (opt-in, no time pressure) ---- */
+function openExceptionModal(panelId){
+  openSheet('Log exception', `
+    <div class="field"><label>Reason</label>
+      <select id="m_excReason">${PRESET_REASONS.map(r=>`<option value="${r}">${r}</option>`).join('')}</select>
+    </div>
+  `, ()=>{
+    const reason = document.getElementById('m_excReason').value;
+    const runtime = state.panels[panelId];
+    if(runtime.activeCycle){
+      runtime.activeCycle.exceptions.push({ reason, loggedAt: nowIso() });
+    }
+    save(); closeSheet(); showToast('Exception logged');
+  }, 'Log it');
+}
+
+
+/* ---- Start session ---- */
+function openStartSessionModal(panelId, pairId){
+  const pair = getPair(pairId);
+  const wrs = pairWrappers(pair);
+  const counterFields = wrs.map(w=>`
+    <div class="field"><label>${w.number} — starting cycle counter</label>
+      <input type="number" inputmode="numeric" id="m_counter_${w.id}" placeholder="e.g. 1000"></div>
+  `).join('');
+  const settingsFields = wrs.map(w=>`
+    <hr class="sep"><h3 style="font-size:13px;">${w.number} settings</h3>
+    <div class="settings-grid">
+      ${settingsInputs(w)}
+    </div>
+  `).join('');
+
+  openSheet(`Start session — ${pair.name}`, `
+    ${counterFields}
+    <div class="hint">Settings below are pre-filled from last known values — only change what's actually changed.</div>
+    ${settingsFields}
+  `, ()=>{
+    const startCounters = {};
+    wrs.forEach(w=>{
+      startCounters[w.id] = document.getElementById(`m_counter_${w.id}`).value;
+      // save settings snapshot back to wrapper as "last known"
+      w.settings = readSettingsInputs(w.id);
+    });
+    save();
+    state.panels[panelId] = {
+      sessionId: uid('sess'),
+      pairId: pairId,
+      startedAt: nowIso(),
+      startCounters,
+      settingsSnapshot: Object.fromEntries(wrs.map(w=>[w.id, {...w.settings}])),
+      cycles: [],
+      activeCycle: null,
+      notes: [],
+    };
+    save(); renderPanels(); closeSheet();
+    showToast('Session started');
+  }, 'Start');
+}
+function settingsInputs(w){
+  const fields = [
+    ['carriageUp','Carriage up'], ['carriageDown','Carriage down'], ['rotation','Rotation speed'],
+    ['filmTension','Film tension'], ['topWraps','Top wraps'], ['bottomWraps','Bottom wraps'], ['autoHeight','Auto height timer']
+  ];
+  return fields.map(([key,label])=>`
+    <div class="field"><label>${label}</label><input type="text" id="m_set_${w.id}_${key}" value="${w.settings[key]||''}"></div>
+  `).join('');
+}
+function readSettingsInputs(wid){
+  const keys = ['carriageUp','carriageDown','rotation','filmTension','topWraps','bottomWraps','autoHeight'];
+  const out = {};
+  keys.forEach(k=>{
+    const el = document.getElementById(`m_set_${wid}_${k}`);
+    out[k] = el ? el.value : '';
+  });
+  return out;
+}
+
+function wireChipGroups(ids){
+  ids.forEach(id=>{
+    document.querySelectorAll('#'+id+' .chip').forEach(c=>{
+      c.onclick = ()=>{
+        document.querySelectorAll('#'+id+' .chip').forEach(x=>x.classList.remove('selected'));
+        c.classList.add('selected');
+      };
+    });
+  });
+}
+
+/* ---- End session ---- */
+function openEndSessionModal(panelId){
+  const runtime = state.panels[panelId];
+  const pair = getPair(runtime.pairId);
+  const wrs = pairWrappers(pair);
+  if(runtime.activeCycle) return showToast('Finish the active cycle first');
+  const counterFields = wrs.map(w=>`
+    <div class="field"><label>${w.number} — ending cycle counter</label>
+      <input type="number" inputmode="numeric" id="m_endcounter_${w.id}" placeholder="e.g. 1042"></div>
+  `).join('');
+  openSheet('End session', `
+    <p class="hint" style="margin-bottom:10px;">${runtime.cycles.length} cycle(s) logged this session.</p>
+    ${counterFields}
+  `, ()=>{
+    const endCounters = {};
+    wrs.forEach(w=> endCounters[w.id] = document.getElementById(`m_endcounter_${w.id}`).value);
+    const finished = {
+      id: runtime.sessionId,
+      pairId: runtime.pairId,
+      startedAt: runtime.startedAt,
+      endedAt: nowIso(),
+      startCounters: runtime.startCounters,
+      endCounters,
+      settingsSnapshot: runtime.settingsSnapshot,
+      cycles: runtime.cycles,
+      notes: runtime.notes,
+    };
+    state.sessions.push(finished);
+    state.panels[panelId] = null;
+    save(); renderPanels(); closeSheet();
+    showToast('Session saved');
+  }, 'End session');
+}
+
+/* ---- Voice note (Web Speech API, best-effort) ---- */
+function openVoiceNoteModal(panelId){
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  openSheet('Add note', `
+    <div class="field">
+      <div class="row" style="gap:10px;">
+        <button class="mic-btn" id="m_micBtn">🎤</button>
+        <span class="hint" id="m_micStatus">${SpeechRec ? 'Tap mic to dictate, or just type' : 'Voice dictation not supported on this browser — type your note'}</span>
+      </div>
+    </div>
+    <div class="field"><textarea id="m_noteText" placeholder="e.g. Front position mechanical fault, kept shutting off"></textarea></div>
+  `, ()=>{
+    const text = document.getElementById('m_noteText').value.trim();
+    if(!text) return closeSheet();
+    state.panels[panelId].notes.push({ time: nowIso(), text });
+    save(); closeSheet(); showToast('Note saved');
+  });
+
+  if(SpeechRec){
+    const rec = new SpeechRec();
+    rec.continuous = true; rec.interimResults = true; rec.lang = 'en-US';
+    let recording = false;
+    const micBtn = document.getElementById('m_micBtn');
+    const status = document.getElementById('m_micStatus');
+    const textarea = document.getElementById('m_noteText');
+    let baseText = '';
+    rec.onresult = (e)=>{
+      let interim = '';
+      let final = '';
+      for(let i=e.resultIndex;i<e.results.length;i++){
+        if(e.results[i].isFinal) final += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
+      }
+      textarea.value = (baseText + ' ' + final + ' ' + interim).trim();
+      if(final) baseText = (baseText + ' ' + final).trim();
+    };
+    rec.onerror = ()=>{ recording=false; micBtn.classList.remove('recording'); status.textContent='Mic error — type instead'; };
+    rec.onend = ()=>{ if(recording){ rec.start(); } };
+    micBtn.onclick = ()=>{
+      recording = !recording;
+      micBtn.classList.toggle('recording', recording);
+      if(recording){ baseText = textarea.value; status.textContent='Listening…'; try{rec.start();}catch(e){} }
+      else{ status.textContent='Stopped'; try{rec.stop();}catch(e){} }
+    };
+  }
+}
+
+/* ---------------------------------------------------------------
+   HISTORY / EXPORT VIEW
+--------------------------------------------------------------- */
+function renderHistory(){
+  const list = document.getElementById('sessionsList');
+  const empty = document.getElementById('sessionsEmpty');
+  list.innerHTML = '';
+  if(state.sessions.length===0){ empty.style.display='block'; return; }
+  empty.style.display='none';
+  [...state.sessions].reverse().forEach(s=>{
+    const pair = getPair(s.pairId);
+    const div = document.createElement('div');
+    div.className='list-item';
+    div.innerHTML = `<span>${pair? pair.name:'Unknown pair'}<small>${fmtDateTime(s.startedAt)} → ${fmtDateTime(s.endedAt)} · ${s.cycles.length} cycles</small></span>`;
+    list.appendChild(div);
+  });
+}
+
+function buildCsv(){
+  const headers = [
+    'session_id','session_started_at','session_ended_at','system','pair','location','wrapper_ids','speed_class',
+    'start_counters','end_counters','settings_snapshot',
+    'cycle_id','cycle_start','cycle_end','cycle_duration_sec',
+    'single_pallet','wrap_start','wrap_end','wrap_duration_sec',
+    'exceptions_json',
+    'error_cause','error_subcategory','error_resolved_by','error_start','error_end','error_duration_sec',
+    'session_notes'
+  ];
+  const rows = [headers];
+
+  state.sessions.forEach(s=>{
+    const pair = getPair(s.pairId);
+    const sys = pair ? getSystem(pair.systemId) : null;
+    const loc = sys ? getLocation(sys.locationId) : null;
+    const wrs = pair ? pairWrappers(pair) : [];
+    const wrapperIds = wrs.map(w=>w.number).join('|');
+    const speedClasses = [...new Set(wrs.map(w=>w.speedClass))].join('|');
+    const sessionNotes = (s.notes||[]).map(n=>`[${n.time}] ${n.text}`).join(' // ');
+
+    const baseRow = [
+      s.id, s.startedAt, s.endedAt,
+      sys?sys.name:'', pair?pair.name:'', loc?loc.name:'', wrapperIds, speedClasses,
+      JSON.stringify(s.startCounters), JSON.stringify(s.endCounters), JSON.stringify(s.settingsSnapshot),
+    ];
+
+    if(s.cycles.length===0){
+      rows.push([...baseRow, '','','','','','','','','','','','','','', sessionNotes]);
+      return;
+    }
+
+    s.cycles.forEach(c=>{
+      const cycleDurSec = c.cycleEnd ? Math.round((c.cycleEnd-c.start)/1000) : '';
+      const wrapDurSec = (c.wrapStart && c.wrapEnd) ? Math.round((c.wrapEnd-c.wrapStart)/1000) : '';
+      const exceptionsJson = JSON.stringify(c.exceptions||[]);
+      const cycleFields = [
+        c.id, new Date(c.start).toISOString(), c.cycleEnd? new Date(c.cycleEnd).toISOString():'', cycleDurSec,
+        c.singlePallet?'yes':'no', c.wrapStart? new Date(c.wrapStart).toISOString():'', c.wrapEnd? new Date(c.wrapEnd).toISOString():'', wrapDurSec,
+        exceptionsJson,
+      ];
+      const errors = c.errors||[];
+      if(errors.length===0){
+        rows.push([...baseRow, ...cycleFields, '','','','','','', sessionNotes]);
+      } else {
+        errors.forEach(e=>{
+          const errDurSec = e.end ? Math.round((e.end-e.start)/1000) : '';
+          rows.push([
+            ...baseRow, ...cycleFields,
+            e.cause||'', e.subcategory||'', e.resolvedBy||'',
+            new Date(e.start).toISOString(), e.end? new Date(e.end).toISOString():'', errDurSec,
+            sessionNotes
+          ]);
+        });
+      }
+    });
+  });
+
+  return rows.map(r=>r.map(csvEscape).join(',')).join('\n');
+}
+function csvEscape(v){
+  if(v===null||v===undefined) return '';
+  const s = String(v);
+  if(/[",\n]/.test(s)) return '"'+s.replace(/"/g,'""')+'"';
+  return s;
+}
+
+let lastCsvBlob = null;
+document.getElementById('exportCsvBtn').onclick = ()=>{
+  if(state.sessions.length===0) return showToast('No sessions to export yet');
+  const csv = buildCsv();
+  lastCsvBlob = new Blob([csv], {type:'text/csv'});
+  const filename = `wrap-throughput-${new Date().toISOString().slice(0,10)}.csv`;
+  const url = URL.createObjectURL(lastCsvBlob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  showToast('CSV downloaded');
+  const shareBtn = document.getElementById('shareCsvBtn');
+  if(navigator.canShare && navigator.canShare({files:[new File([lastCsvBlob], filename, {type:'text/csv'})]})){
+    shareBtn.style.display='block';
+    shareBtn.onclick = async ()=>{
+      try{
+        await navigator.share({ files:[new File([lastCsvBlob], filename, {type:'text/csv'})], title:'Wrap throughput data' });
+      }catch(e){ /* user cancelled */ }
+    };
+  }
+};
+
+/* ---------------------------------------------------------------
+   INIT
+--------------------------------------------------------------- */
+function renderAll(){
+  renderPanels();
+  renderSetup();
+  renderHistory();
+}
+renderAll();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
