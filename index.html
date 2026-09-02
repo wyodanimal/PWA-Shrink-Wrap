@@ -12,8 +12,7 @@
   :root{
     --bg:#14171A; --surface:#1E2226; --surface-2:#262B30; --surface-3:#2F353B;
     --text:#ECEDEE; --text-dim:#9BA3AB; --text-faint:#6B7278;
-    --accent:#E8A33D; --accent-strong:#F2B347;
-    --danger:#D9534F; --machine:#5B8DB8; --success:#4CA771;
+    --accent:#E8A33D; --danger:#D9534F; --machine:#5B8DB8; --success:#4CA771;
     --border:#33393F; --radius:6px;
   }
   *{box-sizing:border-box;}
@@ -51,7 +50,7 @@
   #panelsContainer .timer-big{font-size:22px;}
   #panelsContainer .timer-mid{font-size:15px; font-weight:700;}
   #panelsContainer .panel-head .label{font-size:9px;}
-  #panelsContainer .panel-head .wname{font-size:15px;}
+  #panelsContainer .panel-head .wname{font-size:16px;}
   #panelsContainer .hint{font-size:9.5px;}
   #panelsContainer .btn{font-size:12px; padding:9px 5px;}
   #panelsContainer .btn.small{font-size:10.5px; padding:6px 4px;}
@@ -70,9 +69,7 @@
   .card h2{font-size:13.5px; margin:0 0 10px; color:var(--text-dim); font-weight:600;}
   .card h3{font-size:14px; margin:0 0 8px; font-weight:600;}
   .row{display:flex; gap:8px; align-items:center;}
-  .row.wrap{flex-wrap:wrap;}
   .row.between{justify-content:space-between;}
-  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
   label{display:block; font-size:12px; color:var(--text-dim); margin-bottom:4px;}
   input[type=text],input[type=number],select,textarea{
     width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text);
@@ -89,20 +86,16 @@
   .btn:active{transform:scale(0.98);}
   .btn.primary{background:var(--accent); color:#1A1300; border-color:var(--accent);}
   .btn.danger{background:var(--danger); color:#fff; border-color:var(--danger);}
-  .btn.machine{background:var(--machine); color:#fff; border-color:var(--machine);}
   .btn.success{background:var(--success); color:#0C1F14; border-color:var(--success);}
   .btn.ghost{background:transparent;}
   .btn.block{width:100%;}
   .btn.small{padding:7px 10px; font-size:12.5px;}
   .btn:disabled{opacity:0.4;}
-  .pillrow{display:flex; gap:8px;}
-  .pillrow .btn{flex:1;}
   .badge{
     display:inline-block; font-size:11px; padding:2px 7px; border-radius:20px;
     background:var(--surface-2); color:var(--text-dim); border:1px solid var(--border);
   }
   .badge.running{background:rgba(232,163,61,.15); color:var(--accent); border-color:var(--accent);}
-  .badge.fault{background:rgba(217,83,79,.15); color:var(--danger); border-color:var(--danger);}
   .panel{
     border-left:3px solid var(--border); background:var(--surface); border-radius:var(--radius);
     border-top:1px solid var(--border); border-right:1px solid var(--border); border-bottom:1px solid var(--border);
@@ -116,12 +109,6 @@
   .timer-big{font-size:38px; font-weight:700; line-height:1; margin:6px 0;}
   .timer-sub{font-size:12.5px; color:var(--text-dim); margin-bottom:2px;}
   .stack{display:flex; flex-direction:column; gap:8px; margin-top:12px;}
-  .fault-item{
-    display:flex; justify-content:space-between; align-items:center;
-    background:rgba(217,83,79,.1); border:1px solid var(--danger); border-radius:4px;
-    padding:8px 10px; margin-top:6px; font-size:13px;
-  }
-  .fault-item .fdur{font-weight:700;}
   .list-item{
     display:flex; justify-content:space-between; align-items:center;
     padding:9px 4px; border-bottom:1px solid var(--border); font-size:14px;
@@ -141,7 +128,6 @@
   .close-x{background:none;border:none;color:var(--text-dim);font-size:20px;line-height:1;padding:4px 8px;}
   .modal-actions{display:flex; gap:8px; margin-top:14px;}
   .modal-actions .btn{flex:1;}
-  select[multiple]{min-height:80px;}
   .chip-select{display:flex; gap:6px; flex-wrap:wrap;}
   .chip{
     padding:8px 12px; border-radius:20px; border:1px solid var(--border); background:var(--surface-2);
@@ -185,35 +171,13 @@
   <!-- SETUP VIEW -->
   <div class="view" id="view-setup">
     <div class="card">
-      <h2>Locations</h2>
-      <div id="locationsList" class="stack"></div>
-      <div class="row" style="margin-top:10px; gap:8px;">
-        <input type="text" id="newLocationName" placeholder="New location name">
-        <button class="btn" id="addLocationBtn">Add</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Systems</h2>
-      <div id="systemsList" class="stack"></div>
-      <button class="btn block" id="addSystemBtn" style="margin-top:8px;">+ Add system</button>
-    </div>
-
-    <div class="card">
-      <h2>Pairs</h2>
-      <div id="pairsList" class="stack"></div>
-      <button class="btn block" id="addPairBtn" style="margin-top:8px;">+ Add pair</button>
-    </div>
-
-    <div class="card">
       <h2>Wrappers</h2>
       <div id="wrappersList" class="stack"></div>
-      <button class="btn block" id="addWrapperBtn" style="margin-top:8px;">+ Add wrapper</button>
+      <button class="btn primary block" id="addWrapperBtn" style="margin-top:10px;">+ Add wrapper</button>
     </div>
-
     <div class="card">
       <h2>Reset</h2>
-      <button class="btn danger block" id="loadDefaultsBtn">Load starter defaults (SW0037/38, example low-speed pairs)</button>
+      <button class="btn ghost block" id="loadDefaultsBtn">Load example (SW0038, SW0039 — high speed)</button>
       <button class="btn ghost block" id="wipeBtn" style="margin-top:8px;">Erase all data</button>
     </div>
   </div>
@@ -227,7 +191,7 @@
     </div>
     <div class="card">
       <h2>Export</h2>
-      <p class="hint" style="margin-bottom:10px;">One row per error (or one row per cycle if none). Includes session, wrapper/pair/system, timestamps, durations, and exceptions — ready for a dashboard to ingest.</p>
+      <p class="hint" style="margin-bottom:10px;">One row per error (or one row per cycle if none). Ready for a dashboard to ingest.</p>
       <button class="btn primary block" id="exportCsvBtn">Export CSV</button>
       <button class="btn block" id="shareCsvBtn" style="margin-top:8px; display:none;">Share / Email CSV</button>
     </div>
@@ -245,33 +209,22 @@
 
 <script>
 /* ---------------------------------------------------------------
-   STATE
+   STATE — deliberately flat: wrappers + sessions + panels. No
+   locations/systems/pairs layer; that was the confusing part.
 --------------------------------------------------------------- */
-const STORE_KEY = 'wrapTimerState_v1';
+const STORE_KEY = 'wrapTimerState_v2';
 const PRESET_REASONS = ['Jam','Fault','Wrong size','Other'];
 
 function uid(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
 
 function defaultState(){
   return {
-    locations: [
-      {id:uid('loc'), name:'High Side Dry'},
-      {id:uid('loc'), name:'Low Side Dry'},
-      {id:uid('loc'), name:'FDD Receiving'},
-      {id:uid('loc'), name:'FDD Eggs'},
-      {id:uid('loc'), name:'FDD High Speeds'},
-      {id:uid('loc'), name:'FDD Elevators'},
-    ],
-    systems: [],
-    pairs: [],
     wrappers: [],
     sessions: [],
-    panels: { A: null, B: null }, // in-progress session+cycle runtime state
+    panels: { A: null, B: null },
   };
 }
-
 let state = load();
-
 function load(){
   try{
     const raw = localStorage.getItem(STORE_KEY);
@@ -279,44 +232,19 @@ function load(){
   }catch(e){ console.error('load failed', e); }
   return defaultState();
 }
-function save(){
-  localStorage.setItem(STORE_KEY, JSON.stringify(state));
-}
-function loadStarterDefaults(){
-  const highLoc = state.locations.find(l=>l.name==='FDD High Speeds') || state.locations[0];
-  const lowLoc = state.locations.find(l=>l.name==='Low Side Dry') || state.locations[0];
+function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
 
-  const sys1 = {id:uid('sys'), name:'High Speed System 38/39', locationId:highLoc.id, pairIds:[]};
-  const pair1 = {id:uid('pair'), name:'SW0038/0039', systemId:sys1.id, wrapperIds:[]};
-  const w38 = mkWrapper('SW0038','high',pair1.id);
-  const w39 = mkWrapper('SW0039','high',pair1.id);
-  pair1.wrapperIds = [w38.id, w39.id];
-  sys1.pairIds = [pair1.id];
-
-  const sys2 = {id:uid('sys'), name:'Low Speed System 19-23', locationId:lowLoc.id, pairIds:[]};
-  const pairA = {id:uid('pair'), name:'SW0019/0020', systemId:sys2.id, wrapperIds:[]};
-  const w19 = mkWrapper('SW0019','low',pairA.id);
-  const w20 = mkWrapper('SW0020','low',pairA.id);
-  pairA.wrapperIds=[w19.id,w20.id];
-  const pairB = {id:uid('pair'), name:'SW0022/0023', systemId:sys2.id, wrapperIds:[]};
-  const w22 = mkWrapper('SW0022','low',pairB.id);
-  const w23 = mkWrapper('SW0023','low',pairB.id);
-  pairB.wrapperIds=[w22.id,w23.id];
-  sys2.pairIds=[pairA.id, pairB.id];
-
-  state.systems.push(sys1, sys2);
-  state.pairs.push(pair1, pairA, pairB);
-  state.wrappers.push(w38,w39,w19,w20,w22,w23);
-  save();
-  renderAll();
-  showToast('Starter defaults loaded');
-}
-function mkWrapper(number, speedClass, pairId=null){
+function mkWrapper(number, speedClass){
   return {
-    id:uid('wr'), number, speedClass, pairId,
-    settings:{ carriageUp:'', carriageDown:'', rotation:'', filmTension:'', topWraps:'', bottomWraps:'', autoHeight:'' }
+    id: uid('wr'), number, speedClass,
+    settings: { carriageUp:'', carriageDown:'', rotation:'', filmTension:'', topWraps:'', bottomWraps:'', autoHeight:'' }
   };
 }
+function loadDefaults(){
+  state.wrappers.push(mkWrapper('SW0038','high'), mkWrapper('SW0039','high'));
+  save(); renderAll(); showToast('Example wrappers added');
+}
+function getWrapper(id){ return state.wrappers.find(w=>w.id===id); }
 
 /* ---------------------------------------------------------------
    HELPERS
@@ -343,22 +271,9 @@ function showToast(msg){
   clearTimeout(showToast._t);
   showToast._t = setTimeout(()=>t.classList.remove('show'), 1800);
 }
-function getPair(id){ return state.pairs.find(p=>p.id===id); }
-function getSystem(id){ return state.systems.find(s=>s.id===id); }
-function getWrapper(id){ return state.wrappers.find(w=>w.id===id); }
-function getLocation(id){ return state.locations.find(l=>l.id===id); }
-function pairWrappers(pair){ return pair.wrapperIds.map(getWrapper).filter(Boolean); }
-function pairLabel(pair){
-  const sys = getSystem(pair.systemId);
-  return pair.name + (sys? ' · '+sys.name : '');
-}
-function wrapperLabel(w){
-  const pair = getPair(w.pairId);
-  return w.number + (pair? ' · '+pair.name : '');
-}
 
 /* ---------------------------------------------------------------
-   TAB NAV
+   TAB NAV — always refresh the tab you're switching TO
 --------------------------------------------------------------- */
 document.querySelectorAll('nav.tabs button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
@@ -368,82 +283,25 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
     document.getElementById('view-'+btn.dataset.view).classList.add('active');
     if(btn.dataset.view==='history') renderHistory();
     if(btn.dataset.view==='setup') renderSetup();
+    if(btn.dataset.view==='timer') renderPanels();
   });
 });
 
 /* ---------------------------------------------------------------
-   SETUP VIEW RENDERING
+   SETUP VIEW
 --------------------------------------------------------------- */
 function renderSetup(){
-  // Locations
-  const locList = document.getElementById('locationsList');
-  locList.innerHTML = '';
-  if(state.locations.length===0) locList.innerHTML = '<p class="empty">No locations yet.</p>';
-  state.locations.forEach(loc=>{
-    const div = document.createElement('div');
-    div.className = 'list-item';
-    div.innerHTML = `<span>${loc.name}</span>`;
-    const del = document.createElement('button');
-    del.className='btn small ghost'; del.textContent='Remove';
-    del.onclick=()=>{ state.locations = state.locations.filter(l=>l.id!==loc.id); save(); renderSetup(); };
-    div.appendChild(del);
-    locList.appendChild(div);
-  });
-
-  // Systems
-  const sysList = document.getElementById('systemsList');
-  sysList.innerHTML = '';
-  if(state.systems.length===0) sysList.innerHTML = '<p class="empty">No systems yet.</p>';
-  state.systems.forEach(sys=>{
-    const loc = getLocation(sys.locationId);
-    const div = document.createElement('div');
-    div.className = 'list-item';
-    div.innerHTML = `<span>${sys.name}<small>${loc? loc.name:'No location'} · ${sys.pairIds.length} pair(s)</small></span>`;
-    const del = document.createElement('button');
-    del.className='btn small ghost'; del.textContent='Remove';
-    del.onclick=()=>{
-      state.systems = state.systems.filter(s=>s.id!==sys.id);
-      save(); renderSetup();
-    };
-    div.appendChild(del);
-    sysList.appendChild(div);
-  });
-
-  // Pairs
-  const pairList = document.getElementById('pairsList');
-  pairList.innerHTML = '';
-  if(state.pairs.length===0) pairList.innerHTML = '<p class="empty">No pairs yet.</p>';
-  state.pairs.forEach(pair=>{
-    const sys = getSystem(pair.systemId);
-    const wrs = pairWrappers(pair);
-    const div = document.createElement('div');
-    div.className = 'list-item';
-    div.innerHTML = `<span>${pair.name}<small>${sys?sys.name:'No system'} · ${wrs.map(w=>w.number).join(', ')||'no wrappers'}</small></span>`;
-    const del = document.createElement('button');
-    del.className='btn small ghost'; del.textContent='Remove';
-    del.onclick=()=>{
-      state.pairs = state.pairs.filter(p=>p.id!==pair.id);
-      state.systems.forEach(s=> s.pairIds = s.pairIds.filter(id=>id!==pair.id));
-      save(); renderSetup();
-    };
-    div.appendChild(del);
-    pairList.appendChild(div);
-  });
-
-  // Wrappers
   const wrList = document.getElementById('wrappersList');
   wrList.innerHTML = '';
-  if(state.wrappers.length===0) wrList.innerHTML = '<p class="empty">No wrappers yet.</p>';
+  if(state.wrappers.length===0){ wrList.innerHTML = '<p class="empty">No wrappers yet. Add one below.</p>'; }
   state.wrappers.forEach(w=>{
-    const pair = getPair(w.pairId);
     const div = document.createElement('div');
     div.className = 'list-item';
-    div.innerHTML = `<span>${w.number} <span class="badge">${w.speedClass}</span><small>${pair?pair.name:'Not grouped — stands alone'}</small></span>`;
+    div.innerHTML = `<span>${w.number} <span class="badge">${w.speedClass==='high'?'High speed':'Low speed'}</span></span>`;
     const del = document.createElement('button');
     del.className='btn small ghost'; del.textContent='Remove';
     del.onclick=()=>{
       state.wrappers = state.wrappers.filter(x=>x.id!==w.id);
-      state.pairs.forEach(p=> p.wrapperIds = p.wrapperIds.filter(id=>id!==w.id));
       save(); renderSetup();
     };
     div.appendChild(del);
@@ -451,105 +309,32 @@ function renderSetup(){
   });
 }
 
-document.getElementById('addLocationBtn').onclick = ()=>{
-  const input = document.getElementById('newLocationName');
-  const name = input.value.trim();
-  if(!name) return;
-  state.locations.push({id:uid('loc'), name});
-  input.value='';
-  save(); renderSetup();
-};
-document.getElementById('loadDefaultsBtn').onclick = loadStarterDefaults;
-document.getElementById('wipeBtn').onclick = ()=>{
-  openConfirm('Erase all data?','This clears every wrapper, pair, session, and log. This cannot be undone.', ()=>{
-    state = defaultState(); save(); renderAll();
-  });
-};
-
-document.getElementById('addSystemBtn').onclick = ()=> openSystemModal();
-document.getElementById('addPairBtn').onclick = ()=> openPairModal();
-document.getElementById('addWrapperBtn').onclick = ()=> openWrapperModal();
-
-function openSystemModal(){
-  const locOptions = state.locations.map(l=>`<option value="${l.id}">${l.name}</option>`).join('');
-  openSheet('New system', `
-    <div class="field"><label>System name</label><input type="text" id="m_sysName" placeholder="e.g. High Speed System 38/39"></div>
-    <div class="field"><label>Location</label><select id="m_sysLoc">${locOptions}</select></div>
-  `, ()=>{
-    const name = document.getElementById('m_sysName').value.trim();
-    if(!name) return showToast('Enter a system name');
-    const locationId = document.getElementById('m_sysLoc').value;
-    state.systems.push({id:uid('sys'), name, locationId, pairIds:[]});
-    save(); renderSetup(); closeSheet();
-  });
-}
-function openPairModal(){
-  const sysOptions = state.systems.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-  if(state.systems.length===0) return showToast('Add a system first');
-  openSheet('New pair', `
-    <div class="field"><label>Pair name</label><input type="text" id="m_pairName" placeholder="e.g. SW0020/0021"></div>
-    <div class="field"><label>System</label><select id="m_pairSys">${sysOptions}</select></div>
-  `, ()=>{
-    const name = document.getElementById('m_pairName').value.trim();
-    if(!name) return showToast('Enter a pair name');
-    const systemId = document.getElementById('m_pairSys').value;
-    const pair = {id:uid('pair'), name, systemId, wrapperIds:[]};
-    state.pairs.push(pair);
-    getSystem(systemId).pairIds.push(pair.id);
-    save(); renderSetup(); closeSheet();
-  });
-}
-function openWrapperModal(){
-  openSheet('New wrapper', `
-    <div class="field"><label>Wrapper number</label><input type="text" id="m_wrNum" placeholder="e.g. SW0038"></div>
+document.getElementById('addWrapperBtn').onclick = ()=>{
+  openSheet('Add wrapper', `
     <div class="field"><label>Speed class</label>
       <div class="chip-select" id="m_wrSpeed">
         <div class="chip selected" data-val="high">High speed</div>
         <div class="chip" data-val="low">Low speed</div>
       </div>
     </div>
-    <div class="hint" style="margin-bottom:8px;">Optional — only fill these in if you want to group this wrapper with another one (like a paired low-speed front/back), or roll it up under a named system. You can skip this and use the wrapper on its own.</div>
-    <div class="field"><label>System name (optional)</label><input type="text" id="m_wrSysName" placeholder="e.g. High Speed System 38/39"></div>
-    <div class="field"><label>Pair name (optional)</label><input type="text" id="m_wrPairName" placeholder="e.g. SW0038/0039"></div>
+    <div class="field"><label>Wrapper number</label><input type="text" id="m_wrNum" placeholder="e.g. SW0038"></div>
   `, ()=>{
     const number = document.getElementById('m_wrNum').value.trim();
     if(!number) return showToast('Enter a wrapper number');
     const speedClass = document.querySelector('#m_wrSpeed .chip.selected').dataset.val;
-    const sysName = document.getElementById('m_wrSysName').value.trim();
-    const pairName = document.getElementById('m_wrPairName').value.trim();
-
-    let pairId = null;
-    if(pairName && !sysName) return showToast('Give the system a name too, or leave both blank');
-    if(sysName){
-      let sys = state.systems.find(s=>s.name.toLowerCase()===sysName.toLowerCase());
-      if(!sys){
-        sys = {id:uid('sys'), name:sysName, locationId: state.locations[0]?state.locations[0].id:null, pairIds:[]};
-        state.systems.push(sys);
-      }
-      if(pairName){
-        let pair = state.pairs.find(p=>p.systemId===sys.id && p.name.toLowerCase()===pairName.toLowerCase());
-        if(!pair){
-          pair = {id:uid('pair'), name:pairName, systemId:sys.id, wrapperIds:[]};
-          state.pairs.push(pair);
-          sys.pairIds.push(pair.id);
-        }
-        pairId = pair.id;
-      }
-    }
-
-    const w = mkWrapper(number, speedClass, pairId);
-    state.wrappers.push(w);
-    if(pairId) getPair(pairId).wrapperIds.push(w.id);
+    state.wrappers.push(mkWrapper(number, speedClass));
     save(); renderSetup(); closeSheet();
     showToast(`${number} added`);
   });
-  document.querySelectorAll('#m_wrSpeed .chip').forEach(c=>{
-    c.onclick = ()=>{
-      document.querySelectorAll('#m_wrSpeed .chip').forEach(x=>x.classList.remove('selected'));
-      c.classList.add('selected');
-    };
+  wireChipGroups(['m_wrSpeed']);
+};
+
+document.getElementById('loadDefaultsBtn').onclick = loadDefaults;
+document.getElementById('wipeBtn').onclick = ()=>{
+  openConfirm('Erase all data?','This clears every wrapper, session, and log. This cannot be undone.', ()=>{
+    state = defaultState(); save(); renderAll();
   });
-}
+};
 
 /* ---------------------------------------------------------------
    MODAL / SHEET UTILITIES
@@ -575,6 +360,16 @@ function closeSheet(){ document.getElementById('modalRoot').innerHTML=''; }
 function openConfirm(title, msg, onConfirm){
   openSheet(title, `<p style="color:var(--text-dim); font-size:14px;">${msg}</p>`, ()=>{ onConfirm(); closeSheet(); }, 'Confirm');
 }
+function wireChipGroups(ids){
+  ids.forEach(id=>{
+    document.querySelectorAll('#'+id+' .chip').forEach(c=>{
+      c.onclick = ()=>{
+        document.querySelectorAll('#'+id+' .chip').forEach(x=>x.classList.remove('selected'));
+        c.classList.add('selected');
+      };
+    });
+  });
+}
 
 /* ---------------------------------------------------------------
    TIMER VIEW — PANELS
@@ -582,16 +377,14 @@ function openConfirm(title, msg, onConfirm){
 document.getElementById('dateBadge').textContent = new Date().toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
 
 let tickTimer = null;
-function startTicking(){
-  if(tickTimer) return;
+(function startTicking(){
   tickTimer = setInterval(()=>{
     document.querySelectorAll('[data-live]').forEach(el=>{
       const start = Number(el.dataset.live);
       el.textContent = fmtDur(Date.now()-start);
     });
   },500);
-}
-startTicking();
+})();
 
 function renderPanels(){
   const container = document.getElementById('panelsContainer');
@@ -601,15 +394,8 @@ function renderPanels(){
 
 function newCycle(){
   return {
-    id: uid('cyc'),
-    start: Date.now(),
-    wrapStart: null,
-    wrapEnd: null,
-    cycleEnd: null,
-    singlePallet: false,
-    errors: [],
-    activeError: null,
-    exceptions: [],
+    id: uid('cyc'), start: Date.now(), wrapStart: null, wrapEnd: null, cycleEnd: null,
+    singlePallet: false, errors: [], activeError: null, exceptions: [],
   };
 }
 
@@ -622,7 +408,7 @@ function renderPanel(panelId){
   wrap.className = 'panel ' + stateClass;
 
   if(!runtime || !runtime.sessionId){
-    const wrapperOptions = state.wrappers.map(w=>`<option value="${w.id}">${wrapperLabel(w)}</option>`).join('');
+    const wrapperOptions = state.wrappers.map(w=>`<option value="${w.id}">${w.number}</option>`).join('');
     wrap.innerHTML = `
       <div class="panel-head"><span class="label">${panelId==='A'?'Left':'Right'}</span><span class="badge">Idle</span></div>
       ${state.wrappers.length===0 ? '<p class="empty">No wrappers configured. Add one in Setup.</p>' : `
@@ -631,13 +417,14 @@ function renderPanel(panelId){
       `}
     `;
     if(state.wrappers.length>0){
-      wrap.querySelector('#startSessionBtn_'+panelId).onclick = ()=> openStartSessionModal(panelId, wrap.querySelector('#wrapperSelect_'+panelId).value);
+      const btn = wrap.querySelector('#startSessionBtn_'+panelId);
+      const sel = wrap.querySelector('#wrapperSelect_'+panelId);
+      btn.onclick = ()=> openStartSessionModal(panelId, sel.value);
     }
     return wrap;
   }
 
   const wrapper = getWrapper(runtime.wrapperId);
-
   const canStart = !cycle;
   const canStartWrap = !!cycle && !cycle.wrapStart;
   const canEndWrap = !!cycle && !!cycle.wrapStart && !cycle.wrapEnd && !cycle.activeError;
@@ -650,7 +437,7 @@ function renderPanel(panelId){
       body += `<div class="timer-sub" style="margin-top:4px;">Wrap</div><div class="timer-mid nums" data-live="${cycle.wrapStart}">0:00</div>`;
     }
     if(cycle.activeError){
-      body += `<div class="timer-sub" style="margin-top:4px; color:var(--danger);">Error (${cycle.activeError.cause})</div><div class="timer-mid nums" style="color:var(--danger);" data-live="${cycle.activeError.start}">0:00</div>`;
+      body += `<div class="timer-sub" style="margin-top:4px; color:var(--danger);">Error (${cycle.activeError.cause||'?'})</div><div class="timer-mid nums" style="color:var(--danger);" data-live="${cycle.activeError.start}">0:00</div>`;
     }
   } else {
     body += `<p class="hint">Tap Start the instant the pallets cross the entry light bar.</p>`;
@@ -670,13 +457,13 @@ function renderPanel(panelId){
       <button class="btn small" id="exceptionBtn_${panelId}">Exception</button>
     </div>`;
     if(cycle.errors.length){
-      body += `<div class="hint" style="margin-top:6px;">${cycle.errors.length} error(s) logged this cycle</div>`;
+      body += `<div class="hint" style="margin-top:6px;">${cycle.errors.length} error(s) this cycle</div>`;
     }
   }
 
   wrap.innerHTML = `
     <div class="panel-head">
-      <span class="wname">${wrapper.number}</span>
+      <span class="wname">${wrapper ? wrapper.number : 'Unknown'}</span>
       <span class="badge ${cycle ? 'running' : ''}">${cycle ? 'Running' : 'Ready'}</span>
     </div>
     <div style="margin-top:6px;">${body}</div>
@@ -687,7 +474,7 @@ function renderPanel(panelId){
   `;
 
   const q = (sel)=>wrap.querySelector(sel);
-  if(q('#startBtn_'+panelId)) q('#startBtn_'+panelId).onclick = ()=>{
+  q('#startBtn_'+panelId).onclick = ()=>{
     runtime.activeCycle = newCycle();
     save(); renderPanels();
   };
@@ -721,8 +508,8 @@ function renderPanel(panelId){
     }
   };
   if(q('#exceptionBtn_'+panelId)) q('#exceptionBtn_'+panelId).onclick = ()=> openExceptionModal(panelId);
-  if(q('#endSessionBtn_'+panelId)) q('#endSessionBtn_'+panelId).onclick = ()=> openEndSessionModal(panelId);
-  if(q('#voiceNoteBtn_'+panelId)) q('#voiceNoteBtn_'+panelId).onclick = ()=> openVoiceNoteModal(panelId);
+  q('#endSessionBtn_'+panelId).onclick = ()=> openEndSessionModal(panelId);
+  q('#voiceNoteBtn_'+panelId).onclick = ()=> openVoiceNoteModal(panelId);
 
   return wrap;
 }
@@ -790,7 +577,7 @@ function openResolvedByModal(panelId){
   wireChipGroups(['m_resolvedBy']);
 }
 
-/* ---- Not-wrapped exception (opt-in, no time pressure) ---- */
+/* ---- Not-wrapped exception (opt-in) ---- */
 function openExceptionModal(panelId){
   openSheet('Log exception', `
     <div class="field"><label>Reason</label>
@@ -799,36 +586,27 @@ function openExceptionModal(panelId){
   `, ()=>{
     const reason = document.getElementById('m_excReason').value;
     const runtime = state.panels[panelId];
-    if(runtime.activeCycle){
-      runtime.activeCycle.exceptions.push({ reason, loggedAt: nowIso() });
-    }
+    if(runtime.activeCycle) runtime.activeCycle.exceptions.push({ reason, loggedAt: nowIso() });
     save(); closeSheet(); showToast('Exception logged');
   }, 'Log it');
 }
 
-
-/* ---- Start session ---- */
+/* ---- Start session — always asks, everything skippable ---- */
 function openStartSessionModal(panelId, wrapperId){
   const w = getWrapper(wrapperId);
-
   openSheet(`Start session — ${w.number}`, `
-    <div class="field"><label>${w.number} — starting cycle counter</label>
-      <input type="number" inputmode="numeric" id="m_counter_${w.id}" placeholder="e.g. 1000"></div>
-    <div class="hint">Settings below are pre-filled from last known values — only change what's actually changed.</div>
+    <div class="field"><label>Starting pallet count (optional)</label>
+      <input type="number" inputmode="numeric" id="m_startCount" placeholder="e.g. 1000"></div>
+    <div class="hint" style="margin-bottom:8px;">Settings below are optional — pre-filled from last time. Skip anything you don't need to change.</div>
     <div class="settings-grid">${settingsInputs(w)}</div>
   `, ()=>{
-    const startCounter = document.getElementById(`m_counter_${w.id}`).value;
+    const startCounter = document.getElementById('m_startCount').value;
     w.settings = readSettingsInputs(w.id);
     save();
     state.panels[panelId] = {
-      sessionId: uid('sess'),
-      wrapperId: wrapperId,
-      startedAt: nowIso(),
-      startCounter,
-      settingsSnapshot: {...w.settings},
-      cycles: [],
-      activeCycle: null,
-      notes: [],
+      sessionId: uid('sess'), wrapperId, startedAt: nowIso(),
+      startCounter, settingsSnapshot: {...w.settings},
+      cycles: [], activeCycle: null, notes: [],
     };
     save(); renderPanels(); closeSheet();
     showToast('Session started');
@@ -853,75 +631,58 @@ function readSettingsInputs(wid){
   return out;
 }
 
-function wireChipGroups(ids){
-  ids.forEach(id=>{
-    document.querySelectorAll('#'+id+' .chip').forEach(c=>{
-      c.onclick = ()=>{
-        document.querySelectorAll('#'+id+' .chip').forEach(x=>x.classList.remove('selected'));
-        c.classList.add('selected');
-      };
-    });
-  });
-}
-
-/* ---- End session ---- */
+/* ---- End session — always asks, skippable ---- */
 function openEndSessionModal(panelId){
   const runtime = state.panels[panelId];
   const w = getWrapper(runtime.wrapperId);
   if(runtime.activeCycle) return showToast('Finish the active cycle first');
   openSheet('End session', `
     <p class="hint" style="margin-bottom:10px;">${runtime.cycles.length} cycle(s) logged this session.</p>
-    <div class="field"><label>${w.number} — ending cycle counter</label>
-      <input type="number" inputmode="numeric" id="m_endcounter_${w.id}" placeholder="e.g. 1042"></div>
+    <div class="field"><label>Ending pallet count (optional)</label>
+      <input type="number" inputmode="numeric" id="m_endCount" placeholder="e.g. 1042"></div>
   `, ()=>{
-    const endCounter = document.getElementById(`m_endcounter_${w.id}`).value;
-    const finished = {
-      id: runtime.sessionId,
-      wrapperId: runtime.wrapperId,
-      startedAt: runtime.startedAt,
-      endedAt: nowIso(),
-      startCounter: runtime.startCounter,
-      endCounter,
+    const endCounter = document.getElementById('m_endCount').value;
+    state.sessions.push({
+      id: runtime.sessionId, wrapperId: runtime.wrapperId,
+      startedAt: runtime.startedAt, endedAt: nowIso(),
+      startCounter: runtime.startCounter, endCounter,
       settingsSnapshot: runtime.settingsSnapshot,
-      cycles: runtime.cycles,
-      notes: runtime.notes,
-    };
-    state.sessions.push(finished);
+      cycles: runtime.cycles, notes: runtime.notes,
+    });
     state.panels[panelId] = null;
     save(); renderPanels(); closeSheet();
     showToast('Session saved');
   }, 'End session');
 }
 
-/* ---- Voice note (Web Speech API, best-effort) ---- */
+/* ---- Voice note ---- */
 function openVoiceNoteModal(panelId){
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
   openSheet('Add note', `
     <div class="field">
       <div class="row" style="gap:10px;">
         <button class="mic-btn" id="m_micBtn">🎤</button>
-        <span class="hint" id="m_micStatus">${SpeechRec ? 'Tap mic to dictate, or just type' : 'Voice dictation not supported on this browser — type your note'}</span>
+        <span class="hint" id="m_micStatus">${SpeechRec ? 'Tap mic to dictate, or just type' : 'Voice dictation not supported — type your note'}</span>
       </div>
     </div>
-    <div class="field"><textarea id="m_noteText" placeholder="e.g. Front position mechanical fault, kept shutting off"></textarea></div>
+    <div class="field"><textarea id="m_noteText" placeholder="e.g. Mechanical fault, kept shutting off"></textarea></div>
   `, ()=>{
     const text = document.getElementById('m_noteText').value.trim();
     if(!text) return closeSheet();
-    state.panels[panelId].notes.push({ time: nowIso(), text });
+    const runtime = state.panels[panelId];
+    if(runtime) runtime.notes.push({ time: nowIso(), text });
     save(); closeSheet(); showToast('Note saved');
   });
 
   if(SpeechRec){
     const rec = new SpeechRec();
     rec.continuous = true; rec.interimResults = true; rec.lang = 'en-US';
-    let recording = false;
+    let recording = false, baseText = '';
     const micBtn = document.getElementById('m_micBtn');
     const status = document.getElementById('m_micStatus');
     const textarea = document.getElementById('m_noteText');
-    let baseText = '';
     rec.onresult = (e)=>{
-      let interim = '';
-      let final = '';
+      let interim = '', final = '';
       for(let i=e.resultIndex;i<e.results.length;i++){
         if(e.results[i].isFinal) final += e.results[i][0].transcript;
         else interim += e.results[i][0].transcript;
@@ -941,7 +702,7 @@ function openVoiceNoteModal(panelId){
 }
 
 /* ---------------------------------------------------------------
-   HISTORY / EXPORT VIEW
+   HISTORY / EXPORT
 --------------------------------------------------------------- */
 function renderHistory(){
   const list = document.getElementById('sessionsList');
@@ -960,11 +721,10 @@ function renderHistory(){
 
 function buildCsv(){
   const headers = [
-    'session_id','session_started_at','session_ended_at','wrapper','system','pair','location','speed_class',
-    'start_counter','end_counter','settings_snapshot',
+    'session_id','session_started_at','session_ended_at','wrapper','speed_class',
+    'start_pallet_count','end_pallet_count','settings_snapshot',
     'cycle_id','cycle_start','cycle_end','cycle_duration_sec',
-    'single_pallet','wrap_start','wrap_end','wrap_duration_sec',
-    'exceptions_json',
+    'single_pallet','wrap_start','wrap_end','wrap_duration_sec','exceptions_json',
     'error_cause','error_subcategory','error_resolved_by','error_start','error_end','error_duration_sec',
     'session_notes'
   ];
@@ -972,30 +732,24 @@ function buildCsv(){
 
   state.sessions.forEach(s=>{
     const w = getWrapper(s.wrapperId);
-    const pair = w ? getPair(w.pairId) : null;
-    const sys = pair ? getSystem(pair.systemId) : null;
-    const loc = sys ? getLocation(sys.locationId) : null;
     const sessionNotes = (s.notes||[]).map(n=>`[${n.time}] ${n.text}`).join(' // ');
-
     const baseRow = [
-      s.id, s.startedAt, s.endedAt,
-      w?w.number:'', sys?sys.name:'', pair?pair.name:'', loc?loc.name:'', w?w.speedClass:'',
+      s.id, s.startedAt, s.endedAt, w?w.number:'', w?w.speedClass:'',
       s.startCounter??'', s.endCounter??'', JSON.stringify(s.settingsSnapshot||{}),
     ];
 
     if(s.cycles.length===0){
-      rows.push([...baseRow, '','','','','','','','','','','','','','', sessionNotes]);
+      rows.push([...baseRow, '','','','','','','','','','','','','', sessionNotes]);
       return;
     }
 
     s.cycles.forEach(c=>{
       const cycleDurSec = c.cycleEnd ? Math.round((c.cycleEnd-c.start)/1000) : '';
       const wrapDurSec = (c.wrapStart && c.wrapEnd) ? Math.round((c.wrapEnd-c.wrapStart)/1000) : '';
-      const exceptionsJson = JSON.stringify(c.exceptions||[]);
       const cycleFields = [
         c.id, new Date(c.start).toISOString(), c.cycleEnd? new Date(c.cycleEnd).toISOString():'', cycleDurSec,
         c.singlePallet?'yes':'no', c.wrapStart? new Date(c.wrapStart).toISOString():'', c.wrapEnd? new Date(c.wrapEnd).toISOString():'', wrapDurSec,
-        exceptionsJson,
+        JSON.stringify(c.exceptions||[]),
       ];
       const errors = c.errors||[];
       if(errors.length===0){
@@ -1003,8 +757,7 @@ function buildCsv(){
       } else {
         errors.forEach(e=>{
           const errDurSec = e.end ? Math.round((e.end-e.start)/1000) : '';
-          rows.push([
-            ...baseRow, ...cycleFields,
+          rows.push([...baseRow, ...cycleFields,
             e.cause||'', e.subcategory||'', e.resolvedBy||'',
             new Date(e.start).toISOString(), e.end? new Date(e.end).toISOString():'', errDurSec,
             sessionNotes
@@ -1039,9 +792,8 @@ document.getElementById('exportCsvBtn').onclick = ()=>{
   if(navigator.canShare && navigator.canShare({files:[new File([lastCsvBlob], filename, {type:'text/csv'})]})){
     shareBtn.style.display='block';
     shareBtn.onclick = async ()=>{
-      try{
-        await navigator.share({ files:[new File([lastCsvBlob], filename, {type:'text/csv'})], title:'Wrap throughput data' });
-      }catch(e){ /* user cancelled */ }
+      try{ await navigator.share({ files:[new File([lastCsvBlob], filename, {type:'text/csv'})], title:'Wrap throughput data' }); }
+      catch(e){ /* cancelled */ }
     };
   }
 };
@@ -1049,11 +801,7 @@ document.getElementById('exportCsvBtn').onclick = ()=>{
 /* ---------------------------------------------------------------
    INIT
 --------------------------------------------------------------- */
-function renderAll(){
-  renderPanels();
-  renderSetup();
-  renderHistory();
-}
+function renderAll(){ renderPanels(); renderSetup(); renderHistory(); }
 renderAll();
 
 if('serviceWorker' in navigator){
