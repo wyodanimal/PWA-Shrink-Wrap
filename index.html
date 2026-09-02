@@ -311,7 +311,7 @@ function loadStarterDefaults(){
   renderAll();
   showToast('Starter defaults loaded');
 }
-function mkWrapper(number, speedClass, pairId){
+function mkWrapper(number, speedClass, pairId=null){
   return {
     id:uid('wr'), number, speedClass, pairId,
     settings:{ carriageUp:'', carriageDown:'', rotation:'', filmTension:'', topWraps:'', bottomWraps:'', autoHeight:'' }
@@ -438,7 +438,7 @@ function renderSetup(){
     const pair = getPair(w.pairId);
     const div = document.createElement('div');
     div.className = 'list-item';
-    div.innerHTML = `<span>${w.number} <span class="badge">${w.speedClass}</span><small>${pair?pair.name:'unassigned pair'}</small></span>`;
+    div.innerHTML = `<span>${w.number} <span class="badge">${w.speedClass}</span><small>${pair?pair.name:'Not grouped — stands alone'}</small></span>`;
     const del = document.createElement('button');
     del.className='btn small ghost'; del.textContent='Remove';
     del.onclick=()=>{
@@ -500,26 +500,48 @@ function openPairModal(){
   });
 }
 function openWrapperModal(){
-  const pairOptions = state.pairs.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
-  if(state.pairs.length===0) return showToast('Add a pair first');
   openSheet('New wrapper', `
-    <div class="field"><label>Wrapper number</label><input type="text" id="m_wrNum" placeholder="e.g. SW0021"></div>
+    <div class="field"><label>Wrapper number</label><input type="text" id="m_wrNum" placeholder="e.g. SW0038"></div>
     <div class="field"><label>Speed class</label>
       <div class="chip-select" id="m_wrSpeed">
         <div class="chip selected" data-val="high">High speed</div>
         <div class="chip" data-val="low">Low speed</div>
       </div>
     </div>
-    <div class="field"><label>Pair</label><select id="m_wrPair">${pairOptions}</select></div>
+    <div class="hint" style="margin-bottom:8px;">Optional — only fill these in if you want to group this wrapper with another one (like a paired low-speed front/back), or roll it up under a named system. You can skip this and use the wrapper on its own.</div>
+    <div class="field"><label>System name (optional)</label><input type="text" id="m_wrSysName" placeholder="e.g. High Speed System 38/39"></div>
+    <div class="field"><label>Pair name (optional)</label><input type="text" id="m_wrPairName" placeholder="e.g. SW0038/0039"></div>
   `, ()=>{
     const number = document.getElementById('m_wrNum').value.trim();
     if(!number) return showToast('Enter a wrapper number');
     const speedClass = document.querySelector('#m_wrSpeed .chip.selected').dataset.val;
-    const pairId = document.getElementById('m_wrPair').value;
+    const sysName = document.getElementById('m_wrSysName').value.trim();
+    const pairName = document.getElementById('m_wrPairName').value.trim();
+
+    let pairId = null;
+    if(pairName && !sysName) return showToast('Give the system a name too, or leave both blank');
+    if(sysName){
+      let sys = state.systems.find(s=>s.name.toLowerCase()===sysName.toLowerCase());
+      if(!sys){
+        sys = {id:uid('sys'), name:sysName, locationId: state.locations[0]?state.locations[0].id:null, pairIds:[]};
+        state.systems.push(sys);
+      }
+      if(pairName){
+        let pair = state.pairs.find(p=>p.systemId===sys.id && p.name.toLowerCase()===pairName.toLowerCase());
+        if(!pair){
+          pair = {id:uid('pair'), name:pairName, systemId:sys.id, wrapperIds:[]};
+          state.pairs.push(pair);
+          sys.pairIds.push(pair.id);
+        }
+        pairId = pair.id;
+      }
+    }
+
     const w = mkWrapper(number, speedClass, pairId);
     state.wrappers.push(w);
-    getPair(pairId).wrapperIds.push(w.id);
+    if(pairId) getPair(pairId).wrapperIds.push(w.id);
     save(); renderSetup(); closeSheet();
+    showToast(`${number} added`);
   });
   document.querySelectorAll('#m_wrSpeed .chip').forEach(c=>{
     c.onclick = ()=>{
