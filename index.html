@@ -434,6 +434,7 @@ function newCycle(){
     id: uid('cyc'), start: Date.now(),
     wrapAttempts: [], wrapEnd: null, cycleEnd: null,
     singlePallet: false,
+    perfect: false,
     errors: [], activeError: null,
     exceptions: [], activeException: null,
   };
@@ -465,6 +466,7 @@ function renderPanel(panelId){
   }
 
   const wrapper = getWrapper(runtime.wrapperId);
+  const lastCycle = runtime.cycles.length ? runtime.cycles[runtime.cycles.length-1] : null;
   const canStart = !cycle;
   const canStartWrap = !!cycle && !cycle.wrapEnd && !cycle.activeError && !cycle.activeException;
   const canEndWrap = !!cycle && cycle.wrapAttempts.length>0 && !cycle.wrapEnd && !cycle.activeError && !cycle.activeException;
@@ -494,6 +496,9 @@ function renderPanel(panelId){
     }
   } else {
     body += `<p class="hint">Tap Start the instant the pallets cross the entry light bar.</p>`;
+    if(lastCycle){
+      body += `<button class="btn small ${lastCycle.perfect?'success':''}" id="markPerfectBtn_${panelId}" style="margin-top:8px; width:100%;">${lastCycle.perfect ? '✓ Marked perfect run' : 'Mark last observation as perfect'}</button>`;
+    }
   }
 
   body += `<div class="btnstack">
@@ -588,6 +593,10 @@ function renderPanel(panelId){
   q('#endSessionBtn_'+panelId).onclick = ()=> openEndSessionModal(panelId);
   q('#voiceNoteBtn_'+panelId).onclick = ()=> openVoiceNoteModal(panelId);
   if(q('#switchWrapperBtn_'+panelId)) q('#switchWrapperBtn_'+panelId).onclick = ()=> openSwitchWrapperModal(panelId);
+  if(q('#markPerfectBtn_'+panelId)) q('#markPerfectBtn_'+panelId).onclick = ()=>{
+    lastCycle.perfect = !lastCycle.perfect;
+    save(); renderPanels();
+  };
 
   return wrap;
 }
@@ -840,7 +849,7 @@ function renderHistory(){
   });
 }
 
-const CYCLE_FIELD_COUNT = 12; // matches cycleFields array below
+const CYCLE_FIELD_COUNT = 13; // matches cycleFields array below
 const ERROR_FIELD_COUNT = 5;  // matches error row fields below
 
 function buildCsv(){
@@ -849,7 +858,7 @@ function buildCsv(){
     'start_pallet_count','end_pallet_count','settings_snapshot',
     'cycle_id','cycle_start','cycle_end','cycle_duration_sec',
     'single_pallet','wrap_attempts_count','failed_starts_count','failed_starts_total_sec',
-    'wrap_start','wrap_end','wrap_duration_sec','exceptions_json',
+    'wrap_start','wrap_end','wrap_duration_sec','exceptions_json','perfect_run',
     'error_type','error_resolved_by','error_start','error_end','error_duration_sec',
     'session_notes'
   ];
@@ -877,7 +886,7 @@ function buildCsv(){
         c.singlePallet?'yes':'no',
         (c.wrapAttempts?c.wrapAttempts.length:0), failedStartCount(c), Math.round(failedStartsTotalMs(c)/1000),
         wrapStart? new Date(wrapStart).toISOString():'', c.wrapEnd? new Date(c.wrapEnd).toISOString():'', wrapDurSec,
-        JSON.stringify(c.exceptions||[]),
+        JSON.stringify(c.exceptions||[]), c.perfect?'yes':'no',
       ];
       const errors = c.errors||[];
       if(errors.length===0){
