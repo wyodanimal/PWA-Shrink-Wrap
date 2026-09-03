@@ -52,14 +52,16 @@
   #panelsContainer .panel-head .label{font-size:9px;}
   #panelsContainer .panel-head .wname{font-size:16px;}
   #panelsContainer .hint{font-size:9.5px;}
-  #panelsContainer .btn{font-size:12px; padding:9px 5px;}
-  #panelsContainer .btn.small{font-size:10.5px; padding:6px 4px;}
-  .btnstack{display:flex; flex-direction:column; gap:5px; margin-top:8px;}
+  /* Bigger, easier-to-hit timing buttons — doubled height, fills the dead space */
+  #panelsContainer .btn{font-size:14.5px; padding:18px 6px;}
+  #panelsContainer .btn.small{font-size:11.5px; padding:10px 5px;}
+  .btnstack{display:flex; flex-direction:column; gap:8px; margin-top:10px;}
   .quickrow{display:flex; gap:5px; margin-top:8px;}
   .quickrow .btn{flex:1;}
   .btn.err-active{background:var(--danger); color:#fff; border-color:var(--danger); animation:pulse 1.4s infinite;}
   @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.7;}}
   .btn.single-active{background:var(--machine); color:#fff; border-color:var(--machine);}
+  .btn.exc-active{background:var(--accent); color:#1A1300; border-color:var(--accent); animation:pulse 1.4s infinite;}
   .view{display:none;}
   .view.active{display:block;}
   .card{
@@ -209,11 +211,19 @@
 
 <script>
 /* ---------------------------------------------------------------
-   STATE — deliberately flat: wrappers + sessions + panels. No
-   locations/systems/pairs layer; that was the confusing part.
+   STATE — flat: wrappers + sessions + panels.
+   v3: bumped storage key because the data shape changed (per-position
+   settings for high speed, wrap-attempt list instead of single wrapStart,
+   simplified error types, exception timer). Old v2 data will NOT carry
+   over — that's expected, not a bug.
 --------------------------------------------------------------- */
-const STORE_KEY = 'wrapTimerState_v2';
-const PRESET_REASONS = ['Jam','Fault','Wrong size','Other'];
+const STORE_KEY = 'wrapTimerState_v3';
+const ERROR_TYPES = ['Missed pallet','Film pulled from clamps','Wrap broke','Safety-Lidar false hold','Tuning/adjustment issue','Other'];
+const EXCEPTION_TYPES = ['Film reload','Case fell off pallet','Operator handling delay'];
+const SETTINGS_FIELDS = [
+  ['carriageUp','Carriage up'], ['carriageDown','Carriage down'], ['rotation','Rotation speed'],
+  ['filmTension','Film tension'], ['topWraps','Top wraps'], ['bottomWraps','Bottom wraps'], ['autoHeight','Auto height timer']
+];
 
 function uid(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
 
@@ -234,10 +244,17 @@ function load(){
 }
 function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
 
+function defaultSettingsFields(){
+  const out = {};
+  SETTINGS_FIELDS.forEach(([key])=>{ out[key] = ''; });
+  return out;
+}
 function mkWrapper(number, speedClass){
   return {
     id: uid('wr'), number, speedClass,
-    settings: { carriageUp:'', carriageDown:'', rotation:'', filmTension:'', topWraps:'', bottomWraps:'', autoHeight:'' }
+    settings: speedClass === 'high'
+      ? { front: defaultSettingsFields(), back: defaultSettingsFields() }
+      : defaultSettingsFields()
   };
 }
 function loadDefaults(){
@@ -270,6 +287,23 @@ function showToast(msg){
   t.classList.add('show');
   clearTimeout(showToast._t);
   showToast._t = setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+/* Derived wrap-attempt helpers — Start Wrap Cycle can be tapped
+   repeatedly; every tap before the final one is an auto-logged
+   false start, no manual button needed. */
+function currentWrapStart(cycle){
+  return cycle.wrapAttempts.length ? cycle.wrapAttempts[cycle.wrapAttempts.length-1] : null;
+}
+function failedStartCount(cycle){
+  return Math.max(0, cycle.wrapAttempts.length - 1);
+}
+function failedStartsTotalMs(cycle){
+  let total = 0;
+  for(let i=0;i<cycle.wrapAttempts.length-1;i++){
+    total += cycle.wrapAttempts[i+1] - cycle.wrapAttempts[i];
+  }
+  return total;
 }
 
 /* ---------------------------------------------------------------
@@ -394,8 +428,11 @@ function renderPanels(){
 
 function newCycle(){
   return {
-    id: uid('cyc'), start: Date.now(), wrapStart: null, wrapEnd: null, cycleEnd: null,
-    singlePallet: false, errors: [], activeError: null, exceptions: [],
+    id: uid('cyc'), start: Date.now(),
+    wrapAttempts: [], wrapEnd: null, cycleEnd: null,
+    singlePallet: false,
+    errors: [], activeError: null,
+    exceptions: [], activeException: null,
   };
 }
 
@@ -404,7 +441,7 @@ function renderPanel(panelId){
   const runtime = state.panels[panelId];
   const cycle = runtime && runtime.activeCycle;
   let stateClass = 'state-idle';
-  if(cycle){ stateClass = cycle.activeError ? 'state-fault' : 'state-cycle'; }
+  if(cycle){ stateClass = (cycle.activeError || cycle.activeException) ? 'state-fault' : 'state-cycle'; }
   wrap.className = 'panel ' + stateClass;
 
   if(!runtime || !runtime.sessionId){
@@ -426,18 +463,25 @@ function renderPanel(panelId){
 
   const wrapper = getWrapper(runtime.wrapperId);
   const canStart = !cycle;
-  const canStartWrap = !!cycle && !cycle.wrapStart;
-  const canEndWrap = !!cycle && !!cycle.wrapStart && !cycle.wrapEnd && !cycle.activeError;
-  const canCycleComplete = !!cycle;
+  const canStartWrap = !!cycle && !cycle.wrapEnd && !cycle.activeError && !cycle.activeException;
+  const canEndWrap = !!cycle && cycle.wrapAttempts.length>0 && !cycle.wrapEnd && !cycle.activeError && !cycle.activeException;
+  const canCycleComplete = !!cycle && !cycle.activeError && !cycle.activeException;
+  const canLogError = !!cycle && !cycle.activeException;
+  const canLogException = !!cycle && !cycle.activeError;
 
   let body = '';
   if(cycle){
     body += `<div class="timer-sub">Cycle</div><div class="timer-big nums" data-live="${cycle.start}">0:00</div>`;
-    if(cycle.wrapStart){
-      body += `<div class="timer-sub" style="margin-top:4px;">Wrap</div><div class="timer-mid nums" data-live="${cycle.wrapStart}">0:00</div>`;
+    if(cycle.wrapAttempts.length){
+      const latestStart = currentWrapStart(cycle);
+      const fsCount = failedStartCount(cycle);
+      body += `<div class="timer-sub" style="margin-top:4px;">Wrap${fsCount>0?` · ${fsCount} false start${fsCount>1?'s':''}`:''}</div><div class="timer-mid nums" data-live="${latestStart}">0:00</div>`;
     }
     if(cycle.activeError){
-      body += `<div class="timer-sub" style="margin-top:4px; color:var(--danger);">Error (${cycle.activeError.cause||'?'})</div><div class="timer-mid nums" style="color:var(--danger);" data-live="${cycle.activeError.start}">0:00</div>`;
+      body += `<div class="timer-sub" style="margin-top:4px; color:var(--danger);">Error (${cycle.activeError.errorType||'?'})</div><div class="timer-mid nums" style="color:var(--danger);" data-live="${cycle.activeError.start}">0:00</div>`;
+    }
+    if(cycle.activeException){
+      body += `<div class="timer-sub" style="margin-top:4px; color:var(--accent);">Film reload</div><div class="timer-mid nums" style="color:var(--accent);" data-live="${cycle.activeException.start}">0:00</div>`;
     }
   } else {
     body += `<p class="hint">Tap Start the instant the pallets cross the entry light bar.</p>`;
@@ -453,12 +497,16 @@ function renderPanel(panelId){
   if(cycle){
     body += `<div class="quickrow">
       <button class="btn small ${cycle.singlePallet?'single-active':''}" id="singleBtn_${panelId}">1 pallet</button>
-      <button class="btn small ${cycle.activeError?'err-active':''}" id="errorBtn_${panelId}">${cycle.activeError?'Error Clear':'Wrapper Error'}</button>
-      <button class="btn small" id="exceptionBtn_${panelId}">Exception</button>
+      <button class="btn small ${cycle.activeError?'err-active':''}" id="errorBtn_${panelId}" ${canLogError?'':'disabled'}>${cycle.activeError?'Error — Clear':'Wrapper Error'}</button>
+      <button class="btn small ${cycle.activeException?'exc-active':''}" id="exceptionBtn_${panelId}" ${canLogException?'':'disabled'}>${cycle.activeException?'Film Reload — Stop':'Exception'}</button>
     </div>`;
     if(cycle.errors.length){
       body += `<div class="hint" style="margin-top:6px;">${cycle.errors.length} error(s) this cycle</div>`;
     }
+    if(cycle.exceptions.length){
+      body += `<div class="hint" style="margin-top:2px;">${cycle.exceptions.length} exception(s) this cycle</div>`;
+    }
+    body += `<button class="btn small ghost" id="cancelObsBtn_${panelId}" style="margin-top:8px; width:100%; color:var(--danger); border-color:var(--danger);">Cancel observation</button>`;
   }
 
   wrap.innerHTML = `
@@ -479,7 +527,7 @@ function renderPanel(panelId){
     save(); renderPanels();
   };
   if(q('#startWrapBtn_'+panelId)) q('#startWrapBtn_'+panelId).onclick = ()=>{
-    runtime.activeCycle.wrapStart = Date.now();
+    runtime.activeCycle.wrapAttempts.push(Date.now());
     save(); renderPanels();
   };
   if(q('#endWrapBtn_'+panelId)) q('#endWrapBtn_'+panelId).onclick = ()=>{
@@ -498,63 +546,56 @@ function renderPanel(panelId){
     save(); renderPanels();
   };
   if(q('#errorBtn_'+panelId)) q('#errorBtn_'+panelId).onclick = ()=>{
-    if(runtime.activeCycle.activeError){
-      runtime.activeCycle.activeError.end = Date.now();
+    const c = runtime.activeCycle;
+    if(c.activeError){
+      c.activeError.end = Date.now();
       openResolvedByModal(panelId);
     } else {
-      runtime.activeCycle.activeError = { start: Date.now(), cause:null, subcategory:null, end:null, resolvedBy:null };
+      c.activeError = { start: Date.now(), errorType:null, end:null, resolvedBy:null };
       save(); renderPanels();
-      openErrorCauseModal(panelId);
+      openErrorTypeModal(panelId);
     }
   };
-  if(q('#exceptionBtn_'+panelId)) q('#exceptionBtn_'+panelId).onclick = ()=> openExceptionModal(panelId);
+  if(q('#exceptionBtn_'+panelId)) q('#exceptionBtn_'+panelId).onclick = ()=>{
+    const c = runtime.activeCycle;
+    if(c.activeException){
+      c.activeException.end = Date.now();
+      c.exceptions.push(c.activeException);
+      c.activeException = null;
+      save(); renderPanels();
+      showToast('Film reload logged');
+    } else {
+      openExceptionTypeModal(panelId);
+    }
+  };
+  if(q('#cancelObsBtn_'+panelId)) q('#cancelObsBtn_'+panelId).onclick = ()=>{
+    openConfirm('Cancel this observation?','This discards the current cycle entirely — nothing will be saved for it.', ()=>{
+      runtime.activeCycle = null; save(); renderPanels();
+    });
+  };
   q('#endSessionBtn_'+panelId).onclick = ()=> openEndSessionModal(panelId);
   q('#voiceNoteBtn_'+panelId).onclick = ()=> openVoiceNoteModal(panelId);
 
   return wrap;
 }
 
-/* ---- Wrapper error popups (no time pressure — machine's down) ---- */
-function openErrorCauseModal(panelId){
-  openSheet('Error cause', `
-    <div class="field"><label>Human or machine?</label>
-      <div class="chip-select" id="m_cause">
-        <div class="chip" data-val="Machine">Machine</div>
-        <div class="chip" data-val="Human">Human</div>
-      </div>
-    </div>
-    <div class="field" id="m_subcatField" style="display:none;">
-      <label>Machine issue type</label>
-      <div class="chip-select" id="m_subcat">
-        <div class="chip" data-val="Shrink-wrap">Shrink-wrap</div>
-        <div class="chip" data-val="Safety system">Safety system</div>
-        <div class="chip" data-val="Hoop">Hoop</div>
-        <div class="chip" data-val="Other">Other</div>
+/* ---- Wrapper error: pick the type directly (errors are always
+   machine-owned, so no human/machine split anymore) ---- */
+function openErrorTypeModal(panelId){
+  openSheet('Error type', `
+    <div class="field">
+      <div class="chip-select" id="m_errType">
+        ${ERROR_TYPES.map(t=>`<div class="chip" data-val="${t}">${t}</div>`).join('')}
       </div>
     </div>
   `, ()=>{
-    const causeChip = document.querySelector('#m_cause .chip.selected');
-    if(!causeChip) return showToast('Pick human or machine');
-    const cause = causeChip.dataset.val;
-    let subcategory = null;
-    if(cause==='Machine'){
-      const subChip = document.querySelector('#m_subcat .chip.selected');
-      if(!subChip) return showToast('Pick a machine issue type');
-      subcategory = subChip.dataset.val;
-    }
+    const chip = document.querySelector('#m_errType .chip.selected');
+    if(!chip) return showToast('Pick an error type');
     const runtime = state.panels[panelId];
-    runtime.activeCycle.activeError.cause = cause;
-    runtime.activeCycle.activeError.subcategory = subcategory;
+    runtime.activeCycle.activeError.errorType = chip.dataset.val;
     save(); renderPanels(); closeSheet();
   }, 'Save');
-  document.querySelectorAll('#m_cause .chip').forEach(c=>{
-    c.onclick = ()=>{
-      document.querySelectorAll('#m_cause .chip').forEach(x=>x.classList.remove('selected'));
-      c.classList.add('selected');
-      document.getElementById('m_subcatField').style.display = c.dataset.val==='Machine' ? 'block':'none';
-    };
-  });
-  wireChipGroups(['m_subcat']);
+  wireChipGroups(['m_errType']);
 }
 function openResolvedByModal(panelId){
   openSheet('Who resolved it?', `
@@ -577,18 +618,31 @@ function openResolvedByModal(panelId){
   wireChipGroups(['m_resolvedBy']);
 }
 
-/* ---- Not-wrapped exception (opt-in) ---- */
-function openExceptionModal(panelId){
+/* ---- Exception: Film reload starts/stops a timer (tap Exception
+   again to stop it); the other two log instantly. ---- */
+function openExceptionTypeModal(panelId){
   openSheet('Log exception', `
-    <div class="field"><label>Reason</label>
-      <select id="m_excReason">${PRESET_REASONS.map(r=>`<option value="${r}">${r}</option>`).join('')}</select>
+    <div class="field">
+      <div class="chip-select" id="m_excType">
+        ${EXCEPTION_TYPES.map(t=>`<div class="chip" data-val="${t}">${t}</div>`).join('')}
+      </div>
     </div>
+    <p class="hint">Film reload starts a timer — tap Exception again to stop it once film is reloaded. The other two log instantly with no duration.</p>
   `, ()=>{
-    const reason = document.getElementById('m_excReason').value;
+    const chip = document.querySelector('#m_excType .chip.selected');
+    if(!chip) return showToast('Pick an exception type');
+    const type = chip.dataset.val;
     const runtime = state.panels[panelId];
-    if(runtime.activeCycle) runtime.activeCycle.exceptions.push({ reason, loggedAt: nowIso() });
-    save(); closeSheet(); showToast('Exception logged');
-  }, 'Log it');
+    const c = runtime.activeCycle;
+    if(type === 'Film reload'){
+      c.activeException = { type, start: Date.now(), end: null };
+    } else {
+      c.exceptions.push({ type, loggedAt: nowIso() });
+      showToast(type + ' logged');
+    }
+    save(); renderPanels(); closeSheet();
+  }, 'Log');
+  wireChipGroups(['m_excType']);
 }
 
 /* ---- Start session — always asks, everything skippable ---- */
@@ -598,35 +652,73 @@ function openStartSessionModal(panelId, wrapperId){
     <div class="field"><label>Starting pallet count (optional)</label>
       <input type="number" inputmode="numeric" id="m_startCount" placeholder="e.g. 1000"></div>
     <div class="hint" style="margin-bottom:8px;">Settings below are optional — pre-filled from last time. Skip anything you don't need to change.</div>
-    <div class="settings-grid">${settingsInputs(w)}</div>
+    ${settingsInputs(w)}
   `, ()=>{
     const startCounter = document.getElementById('m_startCount').value;
-    w.settings = readSettingsInputs(w.id);
+    w.settings = readSettingsInputs(w);
     save();
     state.panels[panelId] = {
       sessionId: uid('sess'), wrapperId, startedAt: nowIso(),
-      startCounter, settingsSnapshot: {...w.settings},
+      startCounter, settingsSnapshot: JSON.parse(JSON.stringify(w.settings)),
       cycles: [], activeCycle: null, notes: [],
     };
     save(); renderPanels(); closeSheet();
     showToast('Session started');
   }, 'Start');
+
+  if(w.speedClass === 'high'){
+    const copyBtn = document.getElementById(`m_copyToBack_${w.id}`);
+    if(copyBtn) copyBtn.onclick = ()=>{
+      SETTINGS_FIELDS.forEach(([key])=>{
+        const frontEl = document.getElementById(`m_set_${w.id}_front_${key}`);
+        const backEl = document.getElementById(`m_set_${w.id}_back_${key}`);
+        if(frontEl && backEl) backEl.value = frontEl.value;
+      });
+      showToast('Copied front settings to back');
+    };
+  }
 }
+
+/* High speed = one asset number, two physical positions (front/back)
+   with independent settings, but usually identical — hence the copy
+   shortcut. Low speed = each number is its own machine, flat settings. */
 function settingsInputs(w){
-  const fields = [
-    ['carriageUp','Carriage up'], ['carriageDown','Carriage down'], ['rotation','Rotation speed'],
-    ['filmTension','Film tension'], ['topWraps','Top wraps'], ['bottomWraps','Bottom wraps'], ['autoHeight','Auto height timer']
-  ];
-  return fields.map(([key,label])=>`
+  if(w.speedClass === 'high'){
+    const frontInputs = SETTINGS_FIELDS.map(([key,label])=>`
+      <div class="field"><label>${label}</label><input type="text" id="m_set_${w.id}_front_${key}" value="${(w.settings.front && w.settings.front[key]) || ''}"></div>
+    `).join('');
+    const backInputs = SETTINGS_FIELDS.map(([key,label])=>`
+      <div class="field"><label>${label}</label><input type="text" id="m_set_${w.id}_back_${key}" value="${(w.settings.back && w.settings.back[key]) || ''}"></div>
+    `).join('');
+    return `
+      <div class="row between" style="margin-bottom:6px;"><h3 style="margin:0;">Front</h3>
+        <button type="button" class="btn small ghost" id="m_copyToBack_${w.id}">Copy to Back →</button>
+      </div>
+      <div class="settings-grid">${frontInputs}</div>
+      <hr class="sep">
+      <h3 style="margin:0 0 6px;">Back</h3>
+      <div class="settings-grid">${backInputs}</div>
+    `;
+  }
+  return `<div class="settings-grid">${SETTINGS_FIELDS.map(([key,label])=>`
     <div class="field"><label>${label}</label><input type="text" id="m_set_${w.id}_${key}" value="${w.settings[key]||''}"></div>
-  `).join('');
+  `).join('')}</div>`;
 }
-function readSettingsInputs(wid){
-  const keys = ['carriageUp','carriageDown','rotation','filmTension','topWraps','bottomWraps','autoHeight'];
+function readSettingsInputs(w){
+  if(w.speedClass === 'high'){
+    const front = {}, back = {};
+    SETTINGS_FIELDS.forEach(([key])=>{
+      const frontEl = document.getElementById(`m_set_${w.id}_front_${key}`);
+      const backEl = document.getElementById(`m_set_${w.id}_back_${key}`);
+      front[key] = frontEl ? frontEl.value : '';
+      back[key] = backEl ? backEl.value : '';
+    });
+    return { front, back };
+  }
   const out = {};
-  keys.forEach(k=>{
-    const el = document.getElementById(`m_set_${wid}_${k}`);
-    out[k] = el ? el.value : '';
+  SETTINGS_FIELDS.forEach(([key])=>{
+    const el = document.getElementById(`m_set_${w.id}_${key}`);
+    out[key] = el ? el.value : '';
   });
   return out;
 }
@@ -635,7 +727,7 @@ function readSettingsInputs(wid){
 function openEndSessionModal(panelId){
   const runtime = state.panels[panelId];
   const w = getWrapper(runtime.wrapperId);
-  if(runtime.activeCycle) return showToast('Finish the active cycle first');
+  if(runtime.activeCycle) return showToast('Finish or cancel the active cycle first');
   openSheet('End session', `
     <p class="hint" style="margin-bottom:10px;">${runtime.cycles.length} cycle(s) logged this session.</p>
     <div class="field"><label>Ending pallet count (optional)</label>
@@ -719,13 +811,17 @@ function renderHistory(){
   });
 }
 
+const CYCLE_FIELD_COUNT = 12; // matches cycleFields array below
+const ERROR_FIELD_COUNT = 5;  // matches error row fields below
+
 function buildCsv(){
   const headers = [
     'session_id','session_started_at','session_ended_at','wrapper','speed_class',
     'start_pallet_count','end_pallet_count','settings_snapshot',
     'cycle_id','cycle_start','cycle_end','cycle_duration_sec',
-    'single_pallet','wrap_start','wrap_end','wrap_duration_sec','exceptions_json',
-    'error_cause','error_subcategory','error_resolved_by','error_start','error_end','error_duration_sec',
+    'single_pallet','wrap_attempts_count','failed_starts_count','failed_starts_total_sec',
+    'wrap_start','wrap_end','wrap_duration_sec','exceptions_json',
+    'error_type','error_resolved_by','error_start','error_end','error_duration_sec',
     'session_notes'
   ];
   const rows = [headers];
@@ -739,26 +835,29 @@ function buildCsv(){
     ];
 
     if(s.cycles.length===0){
-      rows.push([...baseRow, '','','','','','','','','','','','','', sessionNotes]);
+      rows.push([...baseRow, ...Array(CYCLE_FIELD_COUNT).fill(''), ...Array(ERROR_FIELD_COUNT).fill(''), sessionNotes]);
       return;
     }
 
     s.cycles.forEach(c=>{
+      const wrapStart = c.wrapAttempts && c.wrapAttempts.length ? c.wrapAttempts[c.wrapAttempts.length-1] : null;
       const cycleDurSec = c.cycleEnd ? Math.round((c.cycleEnd-c.start)/1000) : '';
-      const wrapDurSec = (c.wrapStart && c.wrapEnd) ? Math.round((c.wrapEnd-c.wrapStart)/1000) : '';
+      const wrapDurSec = (wrapStart && c.wrapEnd) ? Math.round((c.wrapEnd-wrapStart)/1000) : '';
       const cycleFields = [
         c.id, new Date(c.start).toISOString(), c.cycleEnd? new Date(c.cycleEnd).toISOString():'', cycleDurSec,
-        c.singlePallet?'yes':'no', c.wrapStart? new Date(c.wrapStart).toISOString():'', c.wrapEnd? new Date(c.wrapEnd).toISOString():'', wrapDurSec,
+        c.singlePallet?'yes':'no',
+        (c.wrapAttempts?c.wrapAttempts.length:0), failedStartCount(c), Math.round(failedStartsTotalMs(c)/1000),
+        wrapStart? new Date(wrapStart).toISOString():'', c.wrapEnd? new Date(c.wrapEnd).toISOString():'', wrapDurSec,
         JSON.stringify(c.exceptions||[]),
       ];
       const errors = c.errors||[];
       if(errors.length===0){
-        rows.push([...baseRow, ...cycleFields, '','','','','','', sessionNotes]);
+        rows.push([...baseRow, ...cycleFields, ...Array(ERROR_FIELD_COUNT).fill(''), sessionNotes]);
       } else {
         errors.forEach(e=>{
           const errDurSec = e.end ? Math.round((e.end-e.start)/1000) : '';
           rows.push([...baseRow, ...cycleFields,
-            e.cause||'', e.subcategory||'', e.resolvedBy||'',
+            e.errorType||'', e.resolvedBy||'',
             new Date(e.start).toISOString(), e.end? new Date(e.end).toISOString():'', errDurSec,
             sessionNotes
           ]);
