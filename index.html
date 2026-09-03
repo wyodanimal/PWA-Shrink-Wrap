@@ -293,7 +293,10 @@ function showToast(msg){
    repeatedly; every tap before the final one is an auto-logged
    false start, no manual button needed. */
 function currentWrapStart(cycle){
-  return cycle.wrapAttempts.length ? cycle.wrapAttempts[cycle.wrapAttempts.length-1] : null;
+  // Wrap timer starts on the FIRST attempt and runs continuously — it
+  // does not reset on repeat taps. Repeat taps only add to the false
+  // start count/lost time below.
+  return cycle.wrapAttempts.length ? cycle.wrapAttempts[0] : null;
 }
 function failedStartCount(cycle){
   return Math.max(0, cycle.wrapAttempts.length - 1);
@@ -840,7 +843,7 @@ function buildCsv(){
     }
 
     s.cycles.forEach(c=>{
-      const wrapStart = c.wrapAttempts && c.wrapAttempts.length ? c.wrapAttempts[c.wrapAttempts.length-1] : null;
+      const wrapStart = c.wrapAttempts && c.wrapAttempts.length ? c.wrapAttempts[0] : null;
       const cycleDurSec = c.cycleEnd ? Math.round((c.cycleEnd-c.start)/1000) : '';
       const wrapDurSec = (wrapStart && c.wrapEnd) ? Math.round((c.wrapEnd-wrapStart)/1000) : '';
       const cycleFields = [
