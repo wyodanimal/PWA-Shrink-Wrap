@@ -478,7 +478,13 @@ function renderPanel(panelId){
     if(cycle.wrapAttempts.length){
       const latestStart = currentWrapStart(cycle);
       const fsCount = failedStartCount(cycle);
-      body += `<div class="timer-sub" style="margin-top:4px;">Wrap${fsCount>0?` · ${fsCount} false start${fsCount>1?'s':''}`:''}</div><div class="timer-mid nums" data-live="${latestStart}">0:00</div>`;
+      const label = `Wrap${fsCount>0?` · ${fsCount} false start${fsCount>1?'s':''}`:''}`;
+      if(cycle.wrapEnd){
+        // Wrap is done — freeze it. Show a static duration, not a ticking clock.
+        body += `<div class="timer-sub" style="margin-top:4px;">${label} · done</div><div class="timer-mid nums">${fmtDur(cycle.wrapEnd-latestStart)}</div>`;
+      } else {
+        body += `<div class="timer-sub" style="margin-top:4px;">${label}</div><div class="timer-mid nums" data-live="${latestStart}">0:00</div>`;
+      }
     }
     if(cycle.activeError){
       body += `<div class="timer-sub" style="margin-top:4px; color:var(--danger);">Error (${cycle.activeError.errorType||'?'})</div><div class="timer-mid nums" style="color:var(--danger);" data-live="${cycle.activeError.start}">0:00</div>`;
@@ -512,11 +518,14 @@ function renderPanel(panelId){
     body += `<button class="btn small ghost" id="cancelObsBtn_${panelId}" style="margin-top:8px; width:100%; color:var(--danger); border-color:var(--danger);">Cancel observation</button>`;
   }
 
+  const canSwitchWrapper = !cycle && runtime.cycles.length===0;
+
   wrap.innerHTML = `
     <div class="panel-head">
       <span class="wname">${wrapper ? wrapper.number : 'Unknown'}</span>
       <span class="badge ${cycle ? 'running' : ''}">${cycle ? 'Running' : 'Ready'}</span>
     </div>
+    ${canSwitchWrapper ? `<button class="btn small ghost" id="switchWrapperBtn_${panelId}" style="margin-top:4px;">Switch wrapper</button>` : ''}
     <div style="margin-top:6px;">${body}</div>
     <div class="row between" style="margin-top:10px;">
       <button class="btn small ghost" id="voiceNoteBtn_${panelId}">🎤</button>
@@ -578,8 +587,25 @@ function renderPanel(panelId){
   };
   q('#endSessionBtn_'+panelId).onclick = ()=> openEndSessionModal(panelId);
   q('#voiceNoteBtn_'+panelId).onclick = ()=> openVoiceNoteModal(panelId);
+  if(q('#switchWrapperBtn_'+panelId)) q('#switchWrapperBtn_'+panelId).onclick = ()=> openSwitchWrapperModal(panelId);
 
   return wrap;
+}
+
+/* ---- Switch wrapper — only allowed before any cycles are logged
+   this session, so history never gets attributed to the wrong
+   machine. If cycles already exist, use End Session + Start Session
+   again instead. ---- */
+function openSwitchWrapperModal(panelId){
+  const runtime = state.panels[panelId];
+  const options = state.wrappers.map(w=>`<option value="${w.id}" ${w.id===runtime.wrapperId?'selected':''}>${w.number}</option>`).join('');
+  openSheet('Switch wrapper', `
+    <div class="field"><label>Wrapper</label><select id="m_switchWrapper">${options}</select></div>
+  `, ()=>{
+    runtime.wrapperId = document.getElementById('m_switchWrapper').value;
+    save(); renderPanels(); closeSheet();
+    showToast('Wrapper switched');
+  }, 'Switch');
 }
 
 /* ---- Wrapper error: pick the type directly (errors are always
