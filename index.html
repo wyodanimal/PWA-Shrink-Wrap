@@ -31,6 +31,12 @@
   }
   header.app h1{font-size:17px; margin:0 0 2px; font-weight:700; letter-spacing:-0.01em;}
   header.app p{margin:0; font-size:12.5px; color:var(--text-dim);}
+  #sessionElapsedWrap{
+    font-size:11px; color:var(--text-dim); margin-top:6px;
+    display:flex; align-items:center; gap:6px;
+  }
+  #sessionElapsedWrap .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);}
+  #sessionElapsedWrap .val{color:var(--text); font-weight:700; font-size:12.5px;}
   nav.tabs{
     position:fixed; bottom:0; left:0; right:0; z-index:30;
     display:flex; background:var(--surface); border-top:1px solid var(--border);
@@ -52,16 +58,15 @@
   #panelsContainer .panel-head .label{font-size:9px;}
   #panelsContainer .panel-head .wname{font-size:16px;}
   #panelsContainer .hint{font-size:9.5px;}
+  #panelsContainer .cyclecount{font-size:10.5px;}
   /* Bigger, easier-to-hit timing buttons — doubled height, fills the dead space */
   #panelsContainer .btn{font-size:14.5px; padding:18px 6px;}
-  #panelsContainer .btn.small{font-size:11.5px; padding:10px 5px;}
+  #panelsContainer .btn.small{font-size:11px; padding:10px 4px;}
   .btnstack{display:flex; flex-direction:column; gap:8px; margin-top:10px;}
   .quickrow{display:flex; gap:5px; margin-top:8px;}
   .quickrow .btn{flex:1;}
-  .btn.err-active{background:var(--danger); color:#fff; border-color:var(--danger); animation:pulse 1.4s infinite;}
-  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.7;}}
   .btn.single-active{background:var(--machine); color:#fff; border-color:var(--machine);}
-  .btn.exc-active{background:var(--accent); color:#1A1300; border-color:var(--accent); animation:pulse 1.4s infinite;}
+  .btn.flag-active{background:var(--accent); color:#1A1300; border-color:var(--accent);}
   .view{display:none;}
   .view.active{display:block;}
   .card{
@@ -105,9 +110,9 @@
   }
   .panel.state-idle{border-left-color:var(--border);}
   .panel.state-cycle{border-left-color:var(--accent);}
-  .panel.state-fault{border-left-color:var(--danger);}
-  .panel-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;}
+  .panel-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:2px;}
   .panel-head .label{font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-faint); font-weight:700;}
+  .cyclecount{font-size:11px; color:var(--text-faint); margin-bottom:8px;}
   .timer-big{font-size:38px; font-weight:700; line-height:1; margin:6px 0;}
   .timer-sub{font-size:12.5px; color:var(--text-dim); margin-bottom:2px;}
   .stack{display:flex; flex-direction:column; gap:8px; margin-top:12px;}
@@ -159,6 +164,11 @@
 <header class="app">
   <h1>Wrap Throughput Timer</h1>
   <p id="headerSub">Cycle · wrap · fault tracking for pallet wrappers</p>
+  <div id="sessionElapsedWrap" style="display:none;">
+    <span class="dot"></span>
+    <span>Observation elapsed:</span>
+    <span class="val nums" id="sessionElapsedVal" data-live="">0:00</span>
+  </div>
 </header>
 
 <main>
@@ -180,6 +190,7 @@
     <div class="card">
       <h2>Reset</h2>
       <button class="btn ghost block" id="loadDefaultsBtn">Load example (SW0038, SW0039 — high speed)</button>
+      <button class="btn ghost block" id="resetObsClockBtn" style="margin-top:8px;">Reset observation elapsed timer</button>
       <button class="btn ghost block" id="wipeBtn" style="margin-top:8px;">Erase all data</button>
     </div>
   </div>
@@ -193,7 +204,7 @@
     </div>
     <div class="card">
       <h2>Export</h2>
-      <p class="hint" style="margin-bottom:10px;">One row per error (or one row per cycle if none). Ready for a dashboard to ingest.</p>
+      <p class="hint" style="margin-bottom:10px;">One row per cycle. Ready for a dashboard to ingest.</p>
       <button class="btn primary block" id="exportCsvBtn">Export CSV</button>
       <button class="btn block" id="shareCsvBtn" style="margin-top:8px; display:none;">Share / Email CSV</button>
     </div>
@@ -212,17 +223,20 @@
 <script>
 /* ---------------------------------------------------------------
    STATE — flat: wrappers + sessions + panels.
-   v3: bumped storage key because the data shape changed (per-position
-   settings for high speed, wrap-attempt list instead of single wrapStart,
-   simplified error types, exception timer). Old v2 data will NOT carry
-   over — that's expected, not a bug.
+   v4: dropped the old Human/Machine/sub-type error branching and the
+   separate timed-exception model entirely. Replaced with two simpler
+   things: a dedicated Miss Start flag (one pallet failed to start,
+   optional reflective/RPC yes-no) and a single Error/Exception button
+   with an instant-log pill list (Film Loading / Human / Machine, no
+   duration tracked). Also added a top-level observation elapsed clock
+   that starts on the very first Start press across either panel.
+   Old v3 data will NOT carry over — that's expected, not a bug.
 --------------------------------------------------------------- */
-const STORE_KEY = 'wrapTimerState_v3';
-const ERROR_TYPES = ['Missed pallet','Film pulled from clamps','Wrap broke','Safety-Lidar false hold','Tuning/adjustment issue','Other'];
-const EXCEPTION_TYPES = ['Film reload','Case fell off pallet','Operator handling delay'];
+const STORE_KEY = 'wrapTimerState_v4';
+const FLAG_TYPES = ['Film Loading','Human','Machine'];
 const SETTINGS_FIELDS = [
-  ['carriageUp','Carriage up'], ['carriageDown','Carriage down'], ['rotation','Rotation speed'],
-  ['filmTension','Film tension'], ['topWraps','Top wraps'], ['bottomWraps','Bottom wraps'], ['autoHeight','Auto height timer']
+  ['carriageUp','Carriage up (%)'], ['carriageDown','Carriage down (%)'], ['rotation','Rotation speed (RPM)'],
+  ['filmTension','Film tension (%)'], ['topWraps','Top wraps'], ['bottomWraps','Bottom wraps'], ['autoHeight','Auto height timer (sec)']
 ];
 
 function uid(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
@@ -232,6 +246,7 @@ function defaultState(){
     wrappers: [],
     sessions: [],
     panels: { A: null, B: null },
+    observationStart: null,
   };
 }
 let state = load();
@@ -291,11 +306,12 @@ function showToast(msg){
 
 /* Derived wrap-attempt helpers — Start Wrap Cycle can be tapped
    repeatedly; every tap before the final one is an auto-logged
-   false start, no manual button needed. */
+   attempt, no manual button needed. This is separate from the
+   dedicated Miss Start flag below. */
 function currentWrapStart(cycle){
   // Wrap timer starts on the FIRST attempt and runs continuously — it
-  // does not reset on repeat taps. Repeat taps only add to the false
-  // start count/lost time below.
+  // does not reset on repeat taps. Repeat taps only add to the
+  // attempt count/lost time below.
   return cycle.wrapAttempts.length ? cycle.wrapAttempts[0] : null;
 }
 function failedStartCount(cycle){
@@ -307,6 +323,26 @@ function failedStartsTotalMs(cycle){
     total += cycle.wrapAttempts[i+1] - cycle.wrapAttempts[i];
   }
   return total;
+}
+
+/* ---------------------------------------------------------------
+   OBSERVATION ELAPSED CLOCK — starts on the very first Start press
+   across either panel, keeps running in the background regardless
+   of which tab is open (the header is outside the tab views).
+--------------------------------------------------------------- */
+function maybeStartObservationClock(){
+  if(!state.observationStart){
+    state.observationStart = Date.now();
+    save();
+  }
+  showObservationClock();
+}
+function showObservationClock(){
+  const wrap = document.getElementById('sessionElapsedWrap');
+  const val = document.getElementById('sessionElapsedVal');
+  if(!state.observationStart){ wrap.style.display = 'none'; return; }
+  wrap.style.display = 'flex';
+  val.dataset.live = state.observationStart;
 }
 
 /* ---------------------------------------------------------------
@@ -367,9 +403,15 @@ document.getElementById('addWrapperBtn').onclick = ()=>{
 };
 
 document.getElementById('loadDefaultsBtn').onclick = loadDefaults;
+document.getElementById('resetObsClockBtn').onclick = ()=>{
+  openConfirm('Reset observation timer?','This zeroes out the overall elapsed-time clock at the top. It does not touch any logged sessions or cycles.', ()=>{
+    state.observationStart = null; save(); showObservationClock();
+    showToast('Observation timer reset');
+  });
+};
 document.getElementById('wipeBtn').onclick = ()=>{
   openConfirm('Erase all data?','This clears every wrapper, session, and log. This cannot be undone.', ()=>{
-    state = defaultState(); save(); renderAll();
+    state = defaultState(); save(); renderAll(); showObservationClock();
   });
 };
 
@@ -418,6 +460,7 @@ let tickTimer = null;
   tickTimer = setInterval(()=>{
     document.querySelectorAll('[data-live]').forEach(el=>{
       const start = Number(el.dataset.live);
+      if(!start) return;
       el.textContent = fmtDur(Date.now()-start);
     });
   },500);
@@ -427,6 +470,7 @@ function renderPanels(){
   const container = document.getElementById('panelsContainer');
   container.innerHTML = '';
   ['A','B'].forEach(pid=> container.appendChild(renderPanel(pid)));
+  showObservationClock();
 }
 
 function newCycle(){
@@ -435,8 +479,8 @@ function newCycle(){
     wrapAttempts: [], wrapEnd: null, cycleEnd: null,
     singlePallet: false,
     perfect: false,
-    errors: [], activeError: null,
-    exceptions: [], activeException: null,
+    missStart: null,   // { reflective: true/false, loggedAt }
+    flags: [],         // [{ type: 'Film Loading'|'Human'|'Machine', loggedAt }]
   };
 }
 
@@ -445,7 +489,7 @@ function renderPanel(panelId){
   const runtime = state.panels[panelId];
   const cycle = runtime && runtime.activeCycle;
   let stateClass = 'state-idle';
-  if(cycle){ stateClass = (cycle.activeError || cycle.activeException) ? 'state-fault' : 'state-cycle'; }
+  if(cycle){ stateClass = 'state-cycle'; }
   wrap.className = 'panel ' + stateClass;
 
   if(!runtime || !runtime.sessionId){
@@ -467,12 +511,11 @@ function renderPanel(panelId){
 
   const wrapper = getWrapper(runtime.wrapperId);
   const lastCycle = runtime.cycles.length ? runtime.cycles[runtime.cycles.length-1] : null;
+  const cycleCount = runtime.cycles.length;
   const canStart = !cycle;
-  const canStartWrap = !!cycle && !cycle.wrapEnd && !cycle.activeError && !cycle.activeException;
-  const canEndWrap = !!cycle && cycle.wrapAttempts.length>0 && !cycle.wrapEnd && !cycle.activeError && !cycle.activeException;
-  const canCycleComplete = !!cycle && !cycle.activeError && !cycle.activeException;
-  const canLogError = !!cycle && !cycle.activeException;
-  const canLogException = !!cycle && !cycle.activeError;
+  const canStartWrap = !!cycle && !cycle.wrapEnd;
+  const canEndWrap = !!cycle && cycle.wrapAttempts.length>0 && !cycle.wrapEnd;
+  const canCycleComplete = !!cycle;
 
   let body = '';
   if(cycle){
@@ -480,19 +523,13 @@ function renderPanel(panelId){
     if(cycle.wrapAttempts.length){
       const latestStart = currentWrapStart(cycle);
       const fsCount = failedStartCount(cycle);
-      const label = `Wrap${fsCount>0?` · ${fsCount} false start${fsCount>1?'s':''}`:''}`;
+      const label = `Wrap${fsCount>0?` · ${fsCount} attempt${fsCount>1?'s':''} before this`:''}`;
       if(cycle.wrapEnd){
         // Wrap is done — freeze it. Show a static duration, not a ticking clock.
         body += `<div class="timer-sub" style="margin-top:4px;">${label} · done</div><div class="timer-mid nums">${fmtDur(cycle.wrapEnd-latestStart)}</div>`;
       } else {
         body += `<div class="timer-sub" style="margin-top:4px;">${label}</div><div class="timer-mid nums" data-live="${latestStart}">0:00</div>`;
       }
-    }
-    if(cycle.activeError){
-      body += `<div class="timer-sub" style="margin-top:4px; color:var(--danger);">Error (${cycle.activeError.errorType||'?'})</div><div class="timer-mid nums" style="color:var(--danger);" data-live="${cycle.activeError.start}">0:00</div>`;
-    }
-    if(cycle.activeException){
-      body += `<div class="timer-sub" style="margin-top:4px; color:var(--accent);">Film reload</div><div class="timer-mid nums" style="color:var(--accent);" data-live="${cycle.activeException.start}">0:00</div>`;
     }
   } else {
     body += `<p class="hint">Tap Start the instant the pallets cross the entry light bar.</p>`;
@@ -511,14 +548,11 @@ function renderPanel(panelId){
   if(cycle){
     body += `<div class="quickrow">
       <button class="btn small ${cycle.singlePallet?'single-active':''}" id="singleBtn_${panelId}">1 pallet</button>
-      <button class="btn small ${cycle.activeError?'err-active':''}" id="errorBtn_${panelId}" ${canLogError?'':'disabled'}>${cycle.activeError?'Error — Clear':'Wrapper Error'}</button>
-      <button class="btn small ${cycle.activeException?'exc-active':''}" id="exceptionBtn_${panelId}" ${canLogException?'':'disabled'}>${cycle.activeException?'Film Reload — Stop':'Exception'}</button>
+      <button class="btn small ${cycle.missStart?'flag-active':''}" id="missStartBtn_${panelId}">${cycle.missStart ? 'Miss Start ✓' : 'Miss Start'}</button>
     </div>`;
-    if(cycle.errors.length){
-      body += `<div class="hint" style="margin-top:6px;">${cycle.errors.length} error(s) this cycle</div>`;
-    }
-    if(cycle.exceptions.length){
-      body += `<div class="hint" style="margin-top:2px;">${cycle.exceptions.length} exception(s) this cycle</div>`;
+    body += `<button class="btn small ghost" id="exceptionBtn_${panelId}" style="margin-top:6px; width:100%;">Error / Exception</button>`;
+    if(cycle.flags.length){
+      body += `<div class="hint" style="margin-top:6px;">${cycle.flags.length} flag(s) this cycle: ${cycle.flags.map(f=>f.type).join(', ')}</div>`;
     }
     body += `<button class="btn small ghost" id="cancelObsBtn_${panelId}" style="margin-top:8px; width:100%; color:var(--danger); border-color:var(--danger);">Cancel observation</button>`;
   }
@@ -530,6 +564,7 @@ function renderPanel(panelId){
       <span class="wname">${wrapper ? wrapper.number : 'Unknown'}</span>
       <span class="badge ${cycle ? 'running' : ''}">${cycle ? 'Running' : 'Ready'}</span>
     </div>
+    <div class="cyclecount">${cycleCount} cycle${cycleCount===1?'':'s'} logged this session</div>
     ${canSwitchWrapper ? `<button class="btn small ghost" id="switchWrapperBtn_${panelId}" style="margin-top:4px;">Switch wrapper</button>` : ''}
     <div style="margin-top:6px;">${body}</div>
     <div class="row between" style="margin-top:10px;">
@@ -540,6 +575,7 @@ function renderPanel(panelId){
 
   const q = (sel)=>wrap.querySelector(sel);
   q('#startBtn_'+panelId).onclick = ()=>{
+    maybeStartObservationClock();
     runtime.activeCycle = newCycle();
     save(); renderPanels();
   };
@@ -562,29 +598,15 @@ function renderPanel(panelId){
     runtime.activeCycle.singlePallet = !runtime.activeCycle.singlePallet;
     save(); renderPanels();
   };
-  if(q('#errorBtn_'+panelId)) q('#errorBtn_'+panelId).onclick = ()=>{
+  if(q('#missStartBtn_'+panelId)) q('#missStartBtn_'+panelId).onclick = ()=>{
     const c = runtime.activeCycle;
-    if(c.activeError){
-      c.activeError.end = Date.now();
-      openResolvedByModal(panelId);
+    if(c.missStart){
+      c.missStart = null; save(); renderPanels(); showToast('Miss start cleared');
     } else {
-      c.activeError = { start: Date.now(), errorType:null, end:null, resolvedBy:null };
-      save(); renderPanels();
-      openErrorTypeModal(panelId);
+      openMissStartModal(panelId);
     }
   };
-  if(q('#exceptionBtn_'+panelId)) q('#exceptionBtn_'+panelId).onclick = ()=>{
-    const c = runtime.activeCycle;
-    if(c.activeException){
-      c.activeException.end = Date.now();
-      c.exceptions.push(c.activeException);
-      c.activeException = null;
-      save(); renderPanels();
-      showToast('Film reload logged');
-    } else {
-      openExceptionTypeModal(panelId);
-    }
-  };
+  if(q('#exceptionBtn_'+panelId)) q('#exceptionBtn_'+panelId).onclick = ()=> openFlagModal(panelId);
   if(q('#cancelObsBtn_'+panelId)) q('#cancelObsBtn_'+panelId).onclick = ()=>{
     openConfirm('Cancel this observation?','This discards the current cycle entirely — nothing will be saved for it.', ()=>{
       runtime.activeCycle = null; save(); renderPanels();
@@ -617,70 +639,50 @@ function openSwitchWrapperModal(panelId){
   }, 'Switch');
 }
 
-/* ---- Wrapper error: pick the type directly (errors are always
-   machine-owned, so no human/machine split anymore) ---- */
-function openErrorTypeModal(panelId){
-  openSheet('Error type', `
-    <div class="field">
-      <div class="chip-select" id="m_errType">
-        ${ERROR_TYPES.map(t=>`<div class="chip" data-val="${t}">${t}</div>`).join('')}
+/* ---- Miss Start — one pallet failed to start wrapping. Asks the
+   reflective/RPC question once, right at the moment you're looking
+   at the pallets. Tap the Miss Start button again to clear it if you
+   tapped it by mistake. ---- */
+function openMissStartModal(panelId){
+  openSheet('Miss start', `
+    <p class="hint" style="margin-bottom:10px;">One pallet failed to start wrapping.</p>
+    <div class="field"><label>Reflective / black plastic (RPCs) present?</label>
+      <div class="chip-select" id="m_missReflective">
+        <div class="chip" data-val="yes">Yes</div>
+        <div class="chip" data-val="no">No</div>
       </div>
     </div>
   `, ()=>{
-    const chip = document.querySelector('#m_errType .chip.selected');
-    if(!chip) return showToast('Pick an error type');
+    const chip = document.querySelector('#m_missReflective .chip.selected');
+    if(!chip) return showToast('Pick yes or no');
     const runtime = state.panels[panelId];
-    runtime.activeCycle.activeError.errorType = chip.dataset.val;
-    save(); renderPanels(); closeSheet();
-  }, 'Save');
-  wireChipGroups(['m_errType']);
-}
-function openResolvedByModal(panelId){
-  openSheet('Who resolved it?', `
-    <div class="field">
-      <div class="chip-select" id="m_resolvedBy">
-        <div class="chip" data-val="Operations">Operations</div>
-        <div class="chip" data-val="Maintenance">Maintenance</div>
-      </div>
-    </div>
-  `, ()=>{
-    const chip = document.querySelector('#m_resolvedBy .chip.selected');
-    if(!chip) return showToast('Pick operations or maintenance');
-    const runtime = state.panels[panelId];
-    const err = runtime.activeCycle.activeError;
-    err.resolvedBy = chip.dataset.val;
-    runtime.activeCycle.errors.push(err);
-    runtime.activeCycle.activeError = null;
-    save(); renderPanels(); closeSheet();
-  }, 'Save');
-  wireChipGroups(['m_resolvedBy']);
-}
-
-/* ---- Exception: Film reload starts/stops a timer (tap Exception
-   again to stop it); the other two log instantly. ---- */
-function openExceptionTypeModal(panelId){
-  openSheet('Log exception', `
-    <div class="field">
-      <div class="chip-select" id="m_excType">
-        ${EXCEPTION_TYPES.map(t=>`<div class="chip" data-val="${t}">${t}</div>`).join('')}
-      </div>
-    </div>
-    <p class="hint">Film reload starts a timer — tap Exception again to stop it once film is reloaded. The other two log instantly with no duration.</p>
-  `, ()=>{
-    const chip = document.querySelector('#m_excType .chip.selected');
-    if(!chip) return showToast('Pick an exception type');
-    const type = chip.dataset.val;
-    const runtime = state.panels[panelId];
-    const c = runtime.activeCycle;
-    if(type === 'Film reload'){
-      c.activeException = { type, start: Date.now(), end: null };
-    } else {
-      c.exceptions.push({ type, loggedAt: nowIso() });
-      showToast(type + ' logged');
-    }
+    runtime.activeCycle.missStart = { reflective: chip.dataset.val==='yes', loggedAt: nowIso() };
     save(); renderPanels(); closeSheet();
   }, 'Log');
-  wireChipGroups(['m_excType']);
+  wireChipGroups(['m_missReflective']);
+}
+
+/* ---- Error / Exception — single button, instant pill-list log.
+   No duration is tracked for any of these; the wrap cycle time
+   itself is the measurement that matters. Tap again to add another
+   flag if more than one thing applies to the same cycle. ---- */
+function openFlagModal(panelId){
+  openSheet('Error / exception', `
+    <div class="field">
+      <div class="chip-select" id="m_flagType">
+        ${FLAG_TYPES.map(t=>`<div class="chip" data-val="${t}">${t}</div>`).join('')}
+      </div>
+    </div>
+  `, ()=>{
+    const chip = document.querySelector('#m_flagType .chip.selected');
+    if(!chip) return showToast('Pick one');
+    const type = chip.dataset.val;
+    const runtime = state.panels[panelId];
+    runtime.activeCycle.flags.push({ type, loggedAt: nowIso() });
+    save(); renderPanels(); closeSheet();
+    showToast(type + ' logged');
+  }, 'Log');
+  wireChipGroups(['m_flagType']);
 }
 
 /* ---- Start session — always asks, everything skippable ---- */
@@ -712,14 +714,16 @@ function openStartSessionModal(panelId, wrapperId){
         const backEl = document.getElementById(`m_set_${w.id}_back_${key}`);
         if(frontEl && backEl) backEl.value = frontEl.value;
       });
-      showToast('Copied front settings to back');
+      showToast('Copied Wrapper 1 (Front) settings to Wrapper 2 (Back)');
     };
   }
 }
 
 /* High speed = one asset number, two physical positions (front/back)
    with independent settings, but usually identical — hence the copy
-   shortcut. Low speed = each number is its own machine, flat settings. */
+   shortcut. Labeled "Wrapper 1, Front" / "Wrapper 2, Back" so it's
+   unmistakable which physical position a value belongs to. Low speed
+   = each number is its own machine, flat settings. */
 function settingsInputs(w){
   if(w.speedClass === 'high'){
     const frontInputs = SETTINGS_FIELDS.map(([key,label])=>`
@@ -729,12 +733,12 @@ function settingsInputs(w){
       <div class="field"><label>${label}</label><input type="text" id="m_set_${w.id}_back_${key}" value="${(w.settings.back && w.settings.back[key]) || ''}"></div>
     `).join('');
     return `
-      <div class="row between" style="margin-bottom:6px;"><h3 style="margin:0;">Front</h3>
-        <button type="button" class="btn small ghost" id="m_copyToBack_${w.id}">Copy to Back →</button>
+      <div class="row between" style="margin-bottom:6px;"><h3 style="margin:0;">Wrapper 1, Front</h3>
+        <button type="button" class="btn small ghost" id="m_copyToBack_${w.id}">Copy to Wrapper 2 →</button>
       </div>
       <div class="settings-grid">${frontInputs}</div>
       <hr class="sep">
-      <h3 style="margin:0 0 6px;">Back</h3>
+      <h3 style="margin:0 0 6px;">Wrapper 2, Back</h3>
       <div class="settings-grid">${backInputs}</div>
     `;
   }
@@ -849,19 +853,17 @@ function renderHistory(){
   });
 }
 
-const CYCLE_FIELD_COUNT = 13; // matches cycleFields array below
-const ERROR_FIELD_COUNT = 5;  // matches error row fields below
-
 function buildCsv(){
   const headers = [
     'session_id','session_started_at','session_ended_at','wrapper','speed_class',
     'start_pallet_count','end_pallet_count','settings_snapshot',
     'cycle_id','cycle_start','cycle_end','cycle_duration_sec',
     'single_pallet','wrap_attempts_count','failed_starts_count','failed_starts_total_sec',
-    'wrap_start','wrap_end','wrap_duration_sec','exceptions_json','perfect_run',
-    'error_type','error_resolved_by','error_start','error_end','error_duration_sec',
+    'wrap_start','wrap_end','wrap_duration_sec','perfect_run',
+    'miss_start','miss_start_reflective','flags_json',
     'session_notes'
   ];
+  const CYCLE_FIELD_COUNT = 18; // cycle_id through flags_json
   const rows = [headers];
 
   state.sessions.forEach(s=>{
@@ -873,7 +875,7 @@ function buildCsv(){
     ];
 
     if(s.cycles.length===0){
-      rows.push([...baseRow, ...Array(CYCLE_FIELD_COUNT).fill(''), ...Array(ERROR_FIELD_COUNT).fill(''), sessionNotes]);
+      rows.push([...baseRow, ...Array(CYCLE_FIELD_COUNT).fill(''), sessionNotes]);
       return;
     }
 
@@ -881,26 +883,16 @@ function buildCsv(){
       const wrapStart = c.wrapAttempts && c.wrapAttempts.length ? c.wrapAttempts[0] : null;
       const cycleDurSec = c.cycleEnd ? Math.round((c.cycleEnd-c.start)/1000) : '';
       const wrapDurSec = (wrapStart && c.wrapEnd) ? Math.round((c.wrapEnd-wrapStart)/1000) : '';
-      const cycleFields = [
+      rows.push([...baseRow,
         c.id, new Date(c.start).toISOString(), c.cycleEnd? new Date(c.cycleEnd).toISOString():'', cycleDurSec,
         c.singlePallet?'yes':'no',
         (c.wrapAttempts?c.wrapAttempts.length:0), failedStartCount(c), Math.round(failedStartsTotalMs(c)/1000),
         wrapStart? new Date(wrapStart).toISOString():'', c.wrapEnd? new Date(c.wrapEnd).toISOString():'', wrapDurSec,
-        JSON.stringify(c.exceptions||[]), c.perfect?'yes':'no',
-      ];
-      const errors = c.errors||[];
-      if(errors.length===0){
-        rows.push([...baseRow, ...cycleFields, ...Array(ERROR_FIELD_COUNT).fill(''), sessionNotes]);
-      } else {
-        errors.forEach(e=>{
-          const errDurSec = e.end ? Math.round((e.end-e.start)/1000) : '';
-          rows.push([...baseRow, ...cycleFields,
-            e.errorType||'', e.resolvedBy||'',
-            new Date(e.start).toISOString(), e.end? new Date(e.end).toISOString():'', errDurSec,
-            sessionNotes
-          ]);
-        });
-      }
+        c.perfect?'yes':'no',
+        c.missStart?'yes':'no', c.missStart ? (c.missStart.reflective?'yes':'no') : '',
+        JSON.stringify(c.flags||[]),
+        sessionNotes
+      ]);
     });
   });
 
@@ -938,7 +930,7 @@ document.getElementById('exportCsvBtn').onclick = ()=>{
 /* ---------------------------------------------------------------
    INIT
 --------------------------------------------------------------- */
-function renderAll(){ renderPanels(); renderSetup(); renderHistory(); }
+function renderAll(){ renderPanels(); renderSetup(); renderHistory(); showObservationClock(); }
 renderAll();
 
 if('serviceWorker' in navigator){
