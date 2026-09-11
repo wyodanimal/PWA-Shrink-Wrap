@@ -178,6 +178,9 @@
       <div class="badge" id="dateBadge"></div>
     </div>
     <div id="panelsContainer"></div>
+    <div id="globalEndSessionWrap" style="margin-top:10px; display:none;">
+      <button class="btn danger block" id="endSessionAllBtn">End Session</button>
+    </div>
   </div>
 
   <!-- SETUP VIEW -->
@@ -204,8 +207,8 @@
     </div>
     <div class="card">
       <h2>Export</h2>
-      <p class="hint" style="margin-bottom:10px;">One row per cycle. Ready for a dashboard to ingest.</p>
-      <button class="btn primary block" id="exportCsvBtn">Export CSV</button>
+      <p class="hint" style="margin-bottom:10px;">One row per cycle. Ending a session on the Timer tab auto-downloads that session's CSV — use this button to re-export everything ever logged, if you need a full backup.</p>
+      <button class="btn primary block" id="exportCsvBtn">Export all sessions (full history)</button>
       <button class="btn block" id="shareCsvBtn" style="margin-top:8px; display:none;">Share / Email CSV</button>
     </div>
   </div>
@@ -231,6 +234,12 @@
    duration tracked). Also added a top-level observation elapsed clock
    that starts on the very first Start press across either panel.
    Old v3 data will NOT carry over — that's expected, not a bug.
+
+   v4.1 (session-export fix): a single combined "End Session" action
+   now ends whatever panels are active, merges just those sessions
+   into one CSV, auto-downloads it with a unique timestamped filename,
+   and zeroes the observation elapsed clock. No state schema change —
+   same STORE_KEY, same session/cycle shape.
 --------------------------------------------------------------- */
 const STORE_KEY = 'wrapTimerState_v4';
 const FLAG_TYPES = ['Film Loading','Human','Machine'];
@@ -328,7 +337,11 @@ function failedStartsTotalMs(cycle){
 /* ---------------------------------------------------------------
    OBSERVATION ELAPSED CLOCK — starts on the very first Start press
    across either panel, keeps running in the background regardless
-   of which tab is open (the header is outside the tab views).
+   of which tab is open (the header is outside the tab views). It is
+   NOT a real background process — it just computes elapsed time from
+   a stored start timestamp, which is why it looks like it "keeps
+   running" even after the app is closed and reopened. Ending a
+   session (combined End Session button) resets it to null/zero.
 --------------------------------------------------------------- */
 function maybeStartObservationClock(){
   if(!state.observationStart){
@@ -471,6 +484,24 @@ function renderPanels(){
   container.innerHTML = '';
   ['A','B'].forEach(pid=> container.appendChild(renderPanel(pid)));
   showObservationClock();
+  renderGlobalEndSessionBtn();
+}
+
+/* Which panels currently have an open session (i.e. Start session was
+   pressed and End Session hasn't happened yet). Used to decide when
+   to show the combined End Session button and which panels it acts on. */
+function activeSessionPanels(){
+  return ['A','B'].filter(pid => state.panels[pid] && state.panels[pid].sessionId);
+}
+
+function renderGlobalEndSessionBtn(){
+  const wrap = document.getElementById('globalEndSessionWrap');
+  const active = activeSessionPanels();
+  if(active.length === 0){ wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  const btn = document.getElementById('endSessionAllBtn');
+  btn.textContent = active.length === 2 ? 'End Session (both machines)' : 'End Session';
+  btn.onclick = openEndSessionAllModal;
 }
 
 function newCycle(){
@@ -567,9 +598,8 @@ function renderPanel(panelId){
     <div class="cyclecount">${cycleCount} cycle${cycleCount===1?'':'s'} logged this session</div>
     ${canSwitchWrapper ? `<button class="btn small ghost" id="switchWrapperBtn_${panelId}" style="margin-top:4px;">Switch wrapper</button>` : ''}
     <div style="margin-top:6px;">${body}</div>
-    <div class="row between" style="margin-top:10px;">
-      <button class="btn small ghost" id="voiceNoteBtn_${panelId}">🎤</button>
-      <button class="btn small ghost" id="endSessionBtn_${panelId}">End session</button>
+    <div class="row" style="margin-top:10px; justify-content:flex-end;">
+      <button class="btn small ghost" id="voiceNoteBtn_${panelId}">🎤 Note</button>
     </div>
   `;
 
@@ -612,7 +642,6 @@ function renderPanel(panelId){
       runtime.activeCycle = null; save(); renderPanels();
     });
   };
-  q('#endSessionBtn_'+panelId).onclick = ()=> openEndSessionModal(panelId);
   q('#voiceNoteBtn_'+panelId).onclick = ()=> openVoiceNoteModal(panelId);
   if(q('#switchWrapperBtn_'+panelId)) q('#switchWrapperBtn_'+panelId).onclick = ()=> openSwitchWrapperModal(panelId);
   if(q('#markPerfectBtn_'+panelId)) q('#markPerfectBtn_'+panelId).onclick = ()=>{
@@ -765,28 +794,65 @@ function readSettingsInputs(w){
   return out;
 }
 
-/* ---- End session — always asks, skippable ---- */
-function openEndSessionModal(panelId){
-  const runtime = state.panels[panelId];
-  const w = getWrapper(runtime.wrapperId);
-  if(runtime.activeCycle) return showToast('Finish or cancel the active cycle first');
+/* ---- End session (combined) — ends every panel that currently has
+   an open session in one shot, merges both machines' cycles into a
+   single CSV (rows already carry the wrapper/machine number so a
+   dashboard can split them back out), auto-downloads that CSV with a
+   unique per-session filename, and zeroes the observation elapsed
+   clock. This replaces the old per-panel End Session buttons — no
+   more accidentally overwriting a previous export because two
+   separate exports shared the same date-only filename. ---- */
+function openEndSessionAllModal(){
+  const active = activeSessionPanels();
+  if(active.length === 0) return showToast('No active session to end');
+
+  const blockedPid = active.find(pid => state.panels[pid].activeCycle);
+  if(blockedPid){
+    const w = getWrapper(state.panels[blockedPid].wrapperId);
+    return showToast(`Finish or cancel the active cycle on ${w?w.number:blockedPid} first`);
+  }
+
+  const fieldsHtml = active.map(pid=>{
+    const runtime = state.panels[pid];
+    const w = getWrapper(runtime.wrapperId);
+    return `
+      <div class="field">
+        <label>${w?w.number:pid} (${pid==='A'?'Left':'Right'}) — ending pallet count (optional)</label>
+        <input type="number" inputmode="numeric" id="m_endCount_${pid}" placeholder="e.g. 1042">
+      </div>`;
+  }).join('');
+
+  const totalCycles = active.reduce((sum,pid)=> sum + state.panels[pid].cycles.length, 0);
+
   openSheet('End session', `
-    <p class="hint" style="margin-bottom:10px;">${runtime.cycles.length} cycle(s) logged this session.</p>
-    <div class="field"><label>Ending pallet count (optional)</label>
-      <input type="number" inputmode="numeric" id="m_endCount" placeholder="e.g. 1042"></div>
+    <p class="hint" style="margin-bottom:10px;">${totalCycles} cycle(s) logged this session across ${active.length} machine${active.length>1?'s':''}.</p>
+    ${fieldsHtml}
   `, ()=>{
-    const endCounter = document.getElementById('m_endCount').value;
-    state.sessions.push({
-      id: runtime.sessionId, wrapperId: runtime.wrapperId,
-      startedAt: runtime.startedAt, endedAt: nowIso(),
-      startCounter: runtime.startCounter, endCounter,
-      settingsSnapshot: runtime.settingsSnapshot,
-      cycles: runtime.cycles, notes: runtime.notes,
+    const newSessions = [];
+    active.forEach(pid=>{
+      const runtime = state.panels[pid];
+      const endCounter = document.getElementById(`m_endCount_${pid}`).value;
+      const session = {
+        id: runtime.sessionId, wrapperId: runtime.wrapperId,
+        startedAt: runtime.startedAt, endedAt: nowIso(),
+        startCounter: runtime.startCounter, endCounter,
+        settingsSnapshot: runtime.settingsSnapshot,
+        cycles: runtime.cycles, notes: runtime.notes,
+      };
+      state.sessions.push(session);
+      newSessions.push(session);
+      state.panels[pid] = null;
     });
-    state.panels[panelId] = null;
-    save(); renderPanels(); closeSheet();
-    showToast('Session saved');
-  }, 'End session');
+    state.observationStart = null;
+    save();
+    closeSheet();
+    renderAll();
+
+    const csv = buildCsv(newSessions);
+    const filename = `wrap-session-${filenameTimestamp()}.csv`;
+    downloadCsv(csv, filename);
+    showToast('Session ended — CSV downloaded');
+  }, 'End session & export');
 }
 
 /* ---- Voice note ---- */
@@ -853,7 +919,12 @@ function renderHistory(){
   });
 }
 
-function buildCsv(){
+/* buildCsv accepts an optional sessions array — pass a subset (e.g.
+   the sessions just closed by the combined End Session action) to
+   export only that batch. Omit it to dump every session ever logged
+   (used by the manual "Export all sessions" button in History). */
+function buildCsv(sessionsOverride){
+  const sessionsToExport = sessionsOverride || state.sessions;
   const headers = [
     'session_id','session_started_at','session_ended_at','wrapper','speed_class',
     'start_pallet_count','end_pallet_count','settings_snapshot',
@@ -866,7 +937,7 @@ function buildCsv(){
   const CYCLE_FIELD_COUNT = 18; // cycle_id through flags_json
   const rows = [headers];
 
-  state.sessions.forEach(s=>{
+  sessionsToExport.forEach(s=>{
     const w = getWrapper(s.wrapperId);
     const sessionNotes = (s.notes||[]).map(n=>`[${n.time}] ${n.text}`).join(' // ');
     const baseRow = [
@@ -905,17 +976,29 @@ function csvEscape(v){
   return s;
 }
 
-let lastCsvBlob = null;
-document.getElementById('exportCsvBtn').onclick = ()=>{
-  if(state.sessions.length===0) return showToast('No sessions to export yet');
-  const csv = buildCsv();
-  lastCsvBlob = new Blob([csv], {type:'text/csv'});
-  const filename = `wrap-throughput-${new Date().toISOString().slice(0,10)}.csv`;
-  const url = URL.createObjectURL(lastCsvBlob);
+/* Unique, filename-safe timestamp — includes time down to the second
+   (plus milliseconds) so two exports on the same day never collide,
+   which was the root cause of downloads silently overwriting each
+   other on the phone. */
+function filenameTimestamp(){
+  return new Date().toISOString().replace(/[:.]/g,'-');
+}
+function downloadCsv(csv, filename){
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
+  return blob;
+}
+
+let lastCsvBlob = null;
+document.getElementById('exportCsvBtn').onclick = ()=>{
+  if(state.sessions.length===0) return showToast('No sessions to export yet');
+  const csv = buildCsv();
+  const filename = `wrap-throughput-all-${filenameTimestamp()}.csv`;
+  lastCsvBlob = downloadCsv(csv, filename);
   showToast('CSV downloaded');
   const shareBtn = document.getElementById('shareCsvBtn');
   if(navigator.canShare && navigator.canShare({files:[new File([lastCsvBlob], filename, {type:'text/csv'})]})){
