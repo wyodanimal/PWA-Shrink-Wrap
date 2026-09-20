@@ -67,6 +67,18 @@
   .quickrow .btn{flex:1;}
   .btn.single-active{background:var(--machine); color:#fff; border-color:var(--machine);}
   .btn.flag-active{background:var(--accent); color:#1A1300; border-color:var(--accent);}
+  .btn.cube-active{background:#8E7CC3; color:#fff; border-color:#8E7CC3;}
+  /* Carriage revolution counter — 70 cube only. Big tap target, count above it. */
+  .revbox{
+    margin-top:8px; padding:8px; text-align:center;
+    background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius);
+  }
+  .revhead{font-size:9.5px; color:var(--text-faint);}
+  .revcount{font-size:26px; font-weight:700; line-height:1.1; margin:4px 0 6px;}
+  #panelsContainer .btn.revtap{
+    width:100%; padding:26px 6px; font-size:16px;
+    touch-action:manipulation; -webkit-user-select:none; user-select:none;
+  }
   .view{display:none;}
   .view.active{display:block;}
   .card{
@@ -240,6 +252,14 @@
    into one CSV, auto-downloads it with a unique timestamped filename,
    and zeroes the observation elapsed clock. No state schema change —
    same STORE_KEY, same session/cycle shape.
+
+   v4.2 (70 cube): each cycle now carries two extra optional fields —
+   seventyCube (bool) and revCount (number of carriage revolutions
+   tapped). Tapping the rev counter auto-flags the cycle as 70 cube.
+   Both are read defensively (missing = false / 0), so older saved
+   cycles load fine. Same STORE_KEY — no schema break. Two new CSV
+   columns were appended at the very END of the row so no existing
+   column position moved.
 --------------------------------------------------------------- */
 const STORE_KEY = 'wrapTimerState_v4';
 const FLAG_TYPES = ['Film Loading','Human','Machine'];
@@ -510,6 +530,8 @@ function newCycle(){
     wrapAttempts: [], wrapEnd: null, cycleEnd: null,
     singlePallet: false,
     perfect: false,
+    seventyCube: false, // this cycle included full-size (70 cube) pallets
+    revCount: 0,        // carriage revolutions tapped — 70 cube only
     missStart: null,   // { reflective: true/false, loggedAt }
     flags: [],         // [{ type: 'Film Loading'|'Human'|'Machine', loggedAt }]
   };
@@ -581,6 +603,12 @@ function renderPanel(panelId){
       <button class="btn small ${cycle.singlePallet?'single-active':''}" id="singleBtn_${panelId}">1 pallet</button>
       <button class="btn small ${cycle.missStart?'flag-active':''}" id="missStartBtn_${panelId}">${cycle.missStart ? 'Miss Start ✓' : 'Miss Start'}</button>
     </div>`;
+    body += `<button class="btn small ${cycle.seventyCube?'cube-active':''}" id="cubeBtn_${panelId}" style="margin-top:5px; width:100%;">${cycle.seventyCube ? '70 cube ✓' : '70 cube'}</button>`;
+    body += `<div class="revbox">
+      <div class="revhead">Carriage revs · 70 cube only</div>
+      <div class="revcount nums">${cycle.revCount||0}</div>
+      <button class="btn revtap" id="revBtn_${panelId}">+1 rev</button>
+    </div>`;
     body += `<button class="btn small ghost" id="exceptionBtn_${panelId}" style="margin-top:6px; width:100%;">Error / Exception</button>`;
     if(cycle.flags.length){
       body += `<div class="hint" style="margin-top:6px;">${cycle.flags.length} flag(s) this cycle: ${cycle.flags.map(f=>f.type).join(', ')}</div>`;
@@ -626,6 +654,32 @@ function renderPanel(panelId){
   };
   if(q('#singleBtn_'+panelId)) q('#singleBtn_'+panelId).onclick = ()=>{
     runtime.activeCycle.singlePallet = !runtime.activeCycle.singlePallet;
+    save(); renderPanels();
+  };
+  if(q('#cubeBtn_'+panelId)) q('#cubeBtn_'+panelId).onclick = ()=>{
+    const c = runtime.activeCycle;
+    if(!c.seventyCube){
+      c.seventyCube = true;
+      save(); renderPanels();
+      return;
+    }
+    // Already flagged. If there's rev data, un-flagging also wipes it
+    // (count only means something on a 70 cube) — so confirm first.
+    const revs = c.revCount || 0;
+    if(revs > 0){
+      openConfirm('Remove 70 cube flag?', `This also clears the carriage rev count (${revs}) for this cycle.`, ()=>{
+        c.seventyCube = false; c.revCount = 0;
+        save(); renderPanels();
+      });
+    } else {
+      c.seventyCube = false;
+      save(); renderPanels();
+    }
+  };
+  if(q('#revBtn_'+panelId)) q('#revBtn_'+panelId).onclick = ()=>{
+    const c = runtime.activeCycle;
+    c.revCount = (c.revCount || 0) + 1;
+    c.seventyCube = true;   // any rev data means this was a 70 cube
     save(); renderPanels();
   };
   if(q('#missStartBtn_'+panelId)) q('#missStartBtn_'+panelId).onclick = ()=>{
@@ -922,7 +976,10 @@ function renderHistory(){
 /* buildCsv accepts an optional sessions array — pass a subset (e.g.
    the sessions just closed by the combined End Session action) to
    export only that batch. Omit it to dump every session ever logged
-   (used by the manual "Export all sessions" button in History). */
+   (used by the manual "Export all sessions" button in History).
+
+   Column order: seventy_cube and carriage_revolutions are appended
+   AFTER session_notes on purpose, so no existing column moved. */
 function buildCsv(sessionsOverride){
   const sessionsToExport = sessionsOverride || state.sessions;
   const headers = [
@@ -932,9 +989,10 @@ function buildCsv(sessionsOverride){
     'single_pallet','wrap_attempts_count','failed_starts_count','failed_starts_total_sec',
     'wrap_start','wrap_end','wrap_duration_sec','perfect_run',
     'miss_start','miss_start_reflective','flags_json',
-    'session_notes'
+    'session_notes',
+    'seventy_cube','carriage_revolutions'
   ];
-  const CYCLE_FIELD_COUNT = 18; // cycle_id through flags_json
+  const CYCLE_FIELD_COUNT = 15; // cycle_id through flags_json (must match the header list above)
   const rows = [headers];
 
   sessionsToExport.forEach(s=>{
@@ -946,7 +1004,7 @@ function buildCsv(sessionsOverride){
     ];
 
     if(s.cycles.length===0){
-      rows.push([...baseRow, ...Array(CYCLE_FIELD_COUNT).fill(''), sessionNotes]);
+      rows.push([...baseRow, ...Array(CYCLE_FIELD_COUNT).fill(''), sessionNotes, '', '']);
       return;
     }
 
@@ -962,7 +1020,9 @@ function buildCsv(sessionsOverride){
         c.perfect?'yes':'no',
         c.missStart?'yes':'no', c.missStart ? (c.missStart.reflective?'yes':'no') : '',
         JSON.stringify(c.flags||[]),
-        sessionNotes
+        sessionNotes,
+        c.seventyCube?'yes':'no',
+        (c.revCount>0) ? c.revCount : ''   // blank = revs weren't counted (not the same as 0)
       ]);
     });
   });
